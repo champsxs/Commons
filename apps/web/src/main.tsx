@@ -1,4 +1,4 @@
-import { StrictMode, createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { StrictMode, Suspense, createContext, lazy, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate } from "react-router";
 import { Button, CommonsProvider, Spinner, cn } from "@commons/ui";
@@ -15,7 +15,8 @@ import { SearchBox } from "./components/SearchBox.tsx";
 import { PageList } from "./routes/PageList.tsx";
 import { PageView } from "./routes/PageView.tsx";
 import { CliLogin } from "./routes/CliLogin.tsx";
-import { Help } from "./routes/Help.tsx";
+// Help (and its Markdown renderer) loads only when someone opens it
+const Help = lazy(() => import("./routes/Help.tsx").then((m) => ({ default: m.Help })));
 
 const MeCtx = createContext<{ me: Me; refresh: () => void } | null>(null);
 export const useMe = () => useContext(MeCtx)!;
@@ -99,8 +100,8 @@ function App() {
             <Route path="/pages/:slug/:tab" element={<PageView />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/cli-login" element={<CliLogin />} />
-            <Route path="/help" element={<Help />} />
-            <Route path="/help/:section" element={<Help />} />
+            <Route path="/help" element={<Suspense><Help /></Suspense>} />
+            <Route path="/help/:section" element={<Suspense><Help /></Suspense>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Shell>

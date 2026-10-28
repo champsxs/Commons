@@ -104,7 +104,7 @@ commons pages push -m "first version"         # prints build errors with file:li
 commons pages publish
 ```
 
-`commons pages dev` pushes a draft on every save. Dataset commands need the "Create datasets and upload files" permission when you sign in.
+`commons pages dev` pushes a draft on every save. `commons help <topic>` prints the same help as the web app. Dataset commands need the "Create datasets and upload files" permission when you sign in.
 
 **Developing the CLI itself:** `pnpm build`, then `node packages/cli/dist/commons.mjs`.
 
@@ -136,7 +136,7 @@ command = "node"
 args = ["/path/to/Commons/apps/mcp/dist/server.mjs"]
 ```
 
-Tools: `search_datasets`, `list_datasets`, `get_dataset`, `get_graphql_schema`, `run_query` (lists capped at 100 items), `list_pages`, `get_page_source`, `get_page_guide`, `push_page_version`, `publish_page_version`.
+Tools: `search_datasets`, `list_datasets`, `get_dataset`, `get_graphql_schema`, `run_query` (lists capped at 100 items), `get_help`, `list_pages`, `get_page_source`, `get_page_guide`, `push_page_version`, `publish_page_version`.
 
 Every call is recorded in the audit log with the user and client (`web`, `cli`, `mcp`, `page`, plus `:claude-code` or `:codex` when detected).
 
@@ -153,9 +153,34 @@ The web app's session has all scopes. Page tokens are read-only and can't use th
 
 ## Help
 
-The web app has built-in help at `/help`, covering getting started, datasets and references, uploading, the CLI, coding agents and MCP, pages, and GraphQL. Commands shown there use this server's real address from `/api/config`, so they work when pasted.
+Help topics are Markdown files in `help/`. The same text is used in three places:
+- **Web app:** `/help`, with a sidebar, filter, copy buttons and in-app links.
+- **CLI:** `commons help` lists the topics; `commons help uploading` prints one.
+- **Agents:** the MCP tool `get_help`.
 
-To add a topic, write a component in `apps/web/src/help/sections/`, using the blocks in `apps/web/src/help/content.tsx` (`H2`, `P`, `List`, `Code`, `Table`, `Note`, `HelpLink`). Then add one entry to `HELP_SECTIONS` in `apps/web/src/help/sections.ts`. It appears in the sidebar, the help home page and the topic filter. Link to it from screens with `/help/<id>`.
+The page guide for agents (`templates/page/AGENTS.md`) is also a topic, `writing-pages`.
+
+To add a topic, add a Markdown file with front matter:
+
+```markdown
+---
+title: Scheduled uploads
+summary: One line for lists and search
+group: Data            # Basics, Data, Tools and agents, Pages or Reference
+order: 35              # position within the group
+keywords: cron nightly automation
+---
+
+Text, `## headings`, tables, and code blocks (```bash title="Label"```).
+
+> [!NOTE]
+> Callouts use GitHub's syntax: [!NOTE] or [!WARNING].
+```
+
+- `{{apiUrl}}` and `{{webOrigin}}` become the server's public addresses.
+- Text between `<!-- if devLogin -->` and `<!-- end -->` appears only on development servers.
+- Link to other topics with `/help/<id>`, or to a heading with `/help/<id>#heading-text`.
+- Topics are read from disk on each request, so changes show up without a restart.
 
 ## API overview
 
@@ -174,6 +199,7 @@ To add a topic, write a component in `apps/web/src/help/sections/`, using the bl
 | `POST /api/pages/:slug/publish` | make a version live |
 | `GET /api/sdk` | UI kit types, GraphQL schema and page template |
 | `GET /api/config` | public addresses (API, web app, page sandbox) |
+| `GET /api/help`, `/api/help/:id` | help topics as Markdown (`?links=absolute` for use outside the app) |
 | `POST /graphql`, `GET /graphiql` | GraphQL |
 
 ## Known limits of this MVP

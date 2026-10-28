@@ -72,6 +72,18 @@ export function createCommonsMcpServer(api: () => Promise<Commons>): McpServer {
   tool("get_page_guide", "How to write a Commons page: rules the build enforces, @commons/ui components, GraphQL conventions. Read before push_page_version.", {},
     async () => (await (await api()).get("/api/sdk")).template["AGENTS.md"]);
 
+  tool("get_help",
+    "Commons' own documentation: how visibility and departments work, upload modes (add, add or update, replace), references, the CLI, MCP, pages, GraphQL. Without a topic, lists the topics. Check it before explaining or changing how data behaves.",
+    { topic: z.string().optional().describe("topic id from the list, e.g. 'uploading'") },
+    async ({ topic }) => {
+      const c = await api();
+      if (!topic) {
+        const { topics } = await c.get("/api/help");
+        return topics.map((t: any) => ({ id: t.id, title: t.title, group: t.group, summary: t.summary }));
+      }
+      return (await c.get(`/api/help/${encodeURIComponent(topic)}?links=absolute`)).markdown;
+    });
+
   tool("push_page_version",
     "Upload page source (Page.tsx with a default-exported React component, plus any other .tsx/.ts files). Commons checks, typechecks and builds it, and returns errors with file and line, or a preview URL. Creates the page on first push.",
     {

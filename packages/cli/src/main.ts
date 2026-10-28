@@ -15,6 +15,7 @@ const program = new Command("commons").description("Commons from the command lin
 const print = (v: unknown) => console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));
 const dim = (s: string) => (process.stdout.isTTY ? `\x1b[2m${s}\x1b[0m` : s);
 const red = (s: string) => (process.stdout.isTTY ? `\x1b[31m${s}\x1b[0m` : s);
+const bold = (s: string) => (process.stdout.isTTY ? `\x1b[1m${s}\x1b[0m` : s);
 const green = (s: string) => (process.stdout.isTTY ? `\x1b[32m${s}\x1b[0m` : s);
 
 const visibilityText = (d: { visibility: string; departmentName?: string | null }) =>
@@ -108,6 +109,65 @@ program.command("whoami").description("Show who you're signed in as").action(run
   console.log(`${me.name} <${me.email}> on ${c.config.url}`);
   console.log(dim(`teams: ${me.teams.map((t: any) => t.name).join(", ") || "none"} · scopes: ${me.scopes.join(", ")}`));
 }));
+
+// ---- Help ----
+// Replaces commander's built-in `help <command>`; `commons <command> --help` still shows options.
+program.helpCommand(false);
+
+/** Light terminal formatting for help Markdown: bold headings, dimmed code fences. */
+function formatMarkdown(md: string) {
+  if (!process.stdout.isTTY) return md;
+  let inCode = false;
+  return md.split("\n").map((line) => {
+    if (line.startsWith("```")) {
+      inCode = !inCode;
+      return dim(line.replace(/title="([^"]*)"/, "($1)"));
+    }
+    if (inCode) return `  ${line}`;
+    if (/^#{1,3} /.test(line)) return `\x1b[1m${line.replace(/^#+ /, "")}\x1b[0m`;
+    return line.replace(/\*\*([^*]+)\*\*/g, "\x1b[1m$1\x1b[0m");
+  }).join("\n");
+}
+
+program
+  .command("help [topic]")
+  .description("Read Commons help (the same text as /help in the app). Without a topic, lists topics.")
+  .option("--json", "print JSON")
+  .action(run(async (topic: string | undefined, opts) => {
+    // Help isn't private, so it works before signing in too
+    const url = ((await loadConfig())?.url ?? DEFAULT_URL).replace(/\/$/, "");
+    const get = async (path: string) => {
+      const res = await fetch(url + path).catch(() => {
+        throw new Error(`Can't reach Commons at ${url}`);
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `${res.status}`);
+      return body;
+    };
+    if (!topic) {
+      const { groups, topics } = await get("/api/help");
+      if (opts.json) return print(topics);
+      for (const g of groups) {
+        const items = topics.filter((t: any) => t.group === g);
+        if (!items.length) continue;
+        console.log(`\n${g}`);
+        for (const t of items) console.log(`  ${t.id.padEnd(18)} ${t.title}${dim(` · ${t.summary}`)}`);
+      }
+      console.log(dim(`\nRead one with: commons help <topic>. Options for a command: commons <command> --help`));
+      return;
+    }
+    const command = program.commands.find((c) => c.name() === topic);
+    try {
+      const t = await get(`/api/help/${encodeURIComponent(topic)}?links=absolute`);
+      if (opts.json) return print(t);
+      console.log(bold(t.title));
+      console.log(dim(`${t.summary}\n`));
+      console.log(formatMarkdown(t.markdown));
+    } catch (e) {
+      if (command) return command.outputHelp();
+      throw e;
+    }
+  }));
 
 // ---- Datasets ----
 const datasets = program.command("datasets").description("List, search and inspect datasets");

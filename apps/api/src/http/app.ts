@@ -22,6 +22,7 @@ import { registerMcpRoute } from "../mcp.ts";
 import { registerDeviceLogin } from "../auth/device.ts";
 import { registerCliDistribution } from "../cli-dist.ts";
 import { departmentsOf, registerDepartmentRoutes } from "../registry/departments.ts";
+import { registerHelpRoutes } from "../help.ts";
 
 const namesFor = (ds: Dataset) =>
   graphqlNames(ds.typeName, ds.fields.map((f) => ({ name: f.name, column: f.column, reference: f.type === "reference" })));
@@ -315,6 +316,7 @@ export async function buildApp(opts: { logger?: boolean | { level: string } } = 
   registerDeviceLogin(app);
   registerCliDistribution(app);
   registerDepartmentRoutes(app);
+  registerHelpRoutes(app);
 
   /** Addresses as people's machines see them, so the app shows commands that work as pasted. */
   app.get("/api/config", async () => ({
