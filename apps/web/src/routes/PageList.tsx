@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { Badge, Button, Checkbox, DataTable, Dialog, ErrorState, Field, Input, Page, Section } from "@commons/ui";
 import { api, useApi, type ApiError } from "../api.ts";
 import { VisibilityBadge, timeAgo } from "../components/bits.tsx";
@@ -7,7 +7,9 @@ import { VisibilityBadge, timeAgo } from "../components/bits.tsx";
 export function PageList() {
   const { data, loading, error, reload } = useApi<any[]>("/pages");
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  // /pages?new=1 opens the new page dialog straight away (used by the home page)
+  const [params] = useSearchParams();
+  const [open, setOpen] = useState(params.get("new") === "1");
   return (
     <Page title="Pages" description="Dashboards and tools built on Commons data, by people and their coding agents."
       actions={<Button variant="primary" onClick={() => setOpen(true)}>New page</Button>}>
