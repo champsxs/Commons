@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Badge, Button, Card, Checkbox, ErrorState, Field, Input, Page, Section, Select, Textarea, cn } from "@commons/ui";
 import { api, upload, useApi, type ApiError, type DatasetSummary } from "../api.ts";
-import { TYPE_LABELS } from "../components/bits.tsx";
+import { TYPE_LABELS, visibilityOptions } from "../components/bits.tsx";
 import { useMe } from "../main.tsx";
 import { IngestReportView, type IngestReport } from "../components/IngestReport.tsx";
 
@@ -158,11 +158,7 @@ export function NewDataset() {
               <Field label="Team"><Select options={me.teams.map((t) => ({ value: t.id, label: t.name }))} placeholder="Just me" value={teamId} onChange={(e) => setTeamId(e.target.value)} /></Field>
               <Field label="Description" className="sm:col-span-2"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is in it, where it comes from, how often it's updated" /></Field>
               <Field label="Who can see it">
-                <Select value={visibility} onChange={(e) => setVisibility(e.target.value)} options={[
-                  { value: "company", label: "Everyone in the company" },
-                  { value: "shared", label: "My team and people I share with" },
-                  { value: "private", label: "Only me and my team" },
-                ]} />
+                <Select value={visibility} onChange={(e) => setVisibility(e.target.value)} options={visibilityOptions()} />
               </Field>
               <Field label="Key field" hint="Uniquely identifies each row. Others use it to link to this dataset.">
                 <Select value={keyField} onChange={(e) => setKeyField(e.target.value)} options={keyOptions} placeholder="None" />

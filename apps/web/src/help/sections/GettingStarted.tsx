@@ -24,7 +24,7 @@ export function GettingStarted() {
         rows={[
           ["Private", "The owner and the owning team"],
           ["Shared", "The owning team, plus the people and teams it's shared with"],
-          ["Company-wide", "Everyone in the company"],
+          ["Any signed-in user", "Everyone who can sign in to Commons"],
         ]}
       />
       <P>

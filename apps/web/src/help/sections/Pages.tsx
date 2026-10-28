@@ -39,7 +39,7 @@ commons pages publish`}</Code>
 
       <H2>Sharing, and who sees what</H2>
       <P>
-        A page's visibility (private or company-wide) decides who can open it. What each person sees <em>inside</em> it
+        A page's visibility (private or any signed-in user) decides who can open it. What each person sees <em>inside</em> it
         depends on their own access: the page queries data as the person viewing it. Share a sales page with the whole
         company, and only people who can see the sales dataset see numbers.
       </P>

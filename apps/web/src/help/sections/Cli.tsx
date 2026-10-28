@@ -58,7 +58,7 @@ export function Cli() {
 commons datasets sales                # search datasets and fields
 commons datasets show monthly_sales   # fields, references, GraphQL names
 commons query '{ allStores(first: 5) { nodes { name city { name } } } }'`}</Code>
-      <Code label="Data">{`commons datasets create suppliers.csv --name Suppliers --visibility company
+      <Code label="Data">{`commons datasets create suppliers.csv --name Suppliers --visibility company   # company = any signed-in user
 commons datasets upload suppliers new.csv --mode upsert --dry-run`}</Code>
       <P>
         <C>datasets create</C> guesses the fields from the file and tells you which columns look like links to existing

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { Badge, Button, Card, Checkbox, ErrorState, Field, Input, Loading, Section, Select, Tabs, Textarea, cn } from "@commons/ui";
 import { api, useApi, type ApiError } from "../api.ts";
 import { PageFrame } from "../components/PageFrame.tsx";
-import { VisibilityBadge, timeAgo } from "../components/bits.tsx";
+import { VisibilityBadge, timeAgo, visibilityOptions } from "../components/bits.tsx";
 
 interface Version {
   id: string;
@@ -159,10 +159,7 @@ function PageSettings({ page, onChange }: { page: PageDetail; onChange: () => vo
           <Field label="Title"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
           <Field label="Description"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
           <Field label="Who can see it">
-            <Select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as any })} options={[
-              { value: "company", label: "Everyone in the company" },
-              { value: "private", label: "Only me and my team" },
-            ]} />
+            <Select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as any })} options={visibilityOptions(["company", "private"])} />
           </Field>
           <Checkbox checked={form.allowWrites} onChange={(v) => setForm({ ...form, allowWrites: v })}
             label={<span>Allow this page to change data <span className="text-muted-foreground">· viewers can then edit rows they have access to through it</span></span>} />

@@ -116,7 +116,7 @@ datasets
     const list = await c.get("/api/datasets");
     if (opts.json) return print(list);
     for (const d of list) {
-      console.log(`${d.slug.padEnd(24)} ${d.name.padEnd(28)} ${String(d.approxRows).padStart(8)} rows  ${dim(`${d.visibility} · ${d.teamName ?? d.ownerName}`)}`);
+      console.log(`${d.slug.padEnd(24)} ${d.name.padEnd(28)} ${String(d.approxRows).padStart(8)} rows  ${dim(`${d.visibility === "company" ? "any signed-in user" : d.visibility} · ${d.teamName ?? d.ownerName}`)}`);
     }
   }));
 
@@ -129,7 +129,7 @@ datasets
     const d = await c.get(`/api/datasets/${slug}`);
     if (opts.json) return print(d);
     const g = d.graphql;
-    console.log(`${d.name} (${d.slug}) · ${d.rowCount} rows · ${d.visibility}`);
+    console.log(`${d.name} (${d.slug}) · ${d.rowCount} rows · ${d.visibility === "company" ? "any signed-in user" : d.visibility}`);
     if (d.description) console.log(dim(d.description));
     console.log(`\nGraphQL: type ${g.type} · list ${g.listField} · one row ${g.byIdField}(id:) · sort ${g.orderBy}`);
     console.log("\nFields:");
@@ -187,7 +187,7 @@ datasets
   .requiredOption("--name <name>", "dataset name")
   .option("--slug <slug>", "dataset id (default: from the name)")
   .option("--key <field>", "key field (default: guessed)")
-  .option("--visibility <v>", "private, shared or company", "private")
+  .option("--visibility <v>", "private, shared, or company (any signed-in user)", "private")
   .option("--description <text>", "what's in it")
   .option("--link <field=dataset>", "make a column a reference, e.g. city_code=cities (repeatable)", (v: string, all: string[]) => [...all, v], [] as string[])
   .option("--yes", "accept every suggested link to an existing dataset")

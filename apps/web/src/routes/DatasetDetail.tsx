@@ -5,7 +5,7 @@ import {
   Textarea, clearDatasetCache, listQuery, type DatasetMeta,
 } from "@commons/ui";
 import { api, upload, useApi, type ApiError, type DatasetSummary } from "../api.ts";
-import { TYPE_LABELS, VisibilityBadge, timeAgo } from "../components/bits.tsx";
+import { TYPE_LABELS, VisibilityBadge, timeAgo, visibilityOptions } from "../components/bits.tsx";
 import { IngestReportView, type IngestReport } from "../components/IngestReport.tsx";
 import { FieldRow, type FieldDraft } from "./NewDataset.tsx";
 import { useMe } from "../main.tsx";
@@ -354,11 +354,7 @@ function SettingsTab({ ds, onChange }: { ds: Detail; onChange: () => void }) {
       <Section title="Access">
         <div className="flex flex-col gap-4">
           <Field label="Who can see it">
-            <Select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as any })} options={[
-              { value: "company", label: "Everyone in the company" },
-              { value: "shared", label: "The team plus people and teams it's shared with" },
-              { value: "private", label: "Only the owner and the team" },
-            ]} />
+            <Select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as any })} options={visibilityOptions()} />
           </Field>
           <Checkbox label="Other datasets may reference this one" checked={form.referenceable} onChange={(v) => setForm({ ...form, referenceable: v })} />
           {form.visibility === "shared" && (

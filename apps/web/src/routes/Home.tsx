@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Badge, Button, EmptyState, Skeleton } from "@commons/ui";
 import { useApi, type DatasetSummary } from "../api.ts";
 import { SearchBox } from "../components/SearchBox.tsx";
-import { VisibilityBadge, timeAgo } from "../components/bits.tsx";
+import { VISIBILITY, VisibilityBadge, timeAgo } from "../components/bits.tsx";
 import { useMe } from "../main.tsx";
 
 interface PageSummary {
@@ -66,7 +66,7 @@ export function Home() {
             <Row key={p.slug} to={`/pages/${p.slug}`} title={p.title}
               badge={p.publishedVersion ? <Badge tone="success">v{p.publishedVersion} live</Badge> : <Badge>draft</Badge>}
               description={p.description || p.slug}
-              meta={[p.teamName ?? p.ownerName, p.visibility === "company" ? "company-wide" : p.visibility,
+              meta={[p.teamName ?? p.ownerName, VISIBILITY[p.visibility].label.toLowerCase(),
                 p.latestVersion && p.latestVersion !== p.publishedVersion ? `v${p.latestVersion} in progress` : null]}
               time={p.updatedAt} />
           ))}

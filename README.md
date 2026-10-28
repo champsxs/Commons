@@ -19,9 +19,9 @@ Open http://localhost:5173 and pick a sample user (development sign-in; SSO come
 | User | Team | Sees |
 |---|---|---|
 | Alice Andersson | Data Platform (admin) | everything |
-| Bob Berg | Retail Operations | company-wide data plus Retail's shared sales |
+| Bob Berg | Retail Operations | data open to any signed-in user, plus Retail's shared sales |
 | Carol Chen | Retail Operations | same as Bob |
-| Dave Dahl | none | company-wide data only |
+| Dave Dahl | none | only data open to any signed-in user |
 
 Sample datasets: `countries` ← `cities` ← `stores` ← `monthly_sales` (shared with Retail Operations only).
 
@@ -41,7 +41,7 @@ templates/page starter page folder, with AGENTS.md / CLAUDE.md for coding agents
 - Defining a dataset creates a real table in the `data` schema. A **reference** field (`city`) becomes a foreign key (`city_id`) plus a link record, so the registry knows who uses what.
 - The builder can start from a CSV/JSON file: it guesses field types and a key field, then suggests reuse. It flags similar existing datasets ("this may already exist") and columns that should link to one ("`city_code` → Cities").
 - **GraphQL** is generated from the tables and rebuilt whenever a dataset changes. References work both ways: `store { city { country } }` and `city { stores }`.
-- **Permissions** are enforced by Postgres row-level security. Datasets are private (owner and team), shared (plus the teams/people it's shared with) or company-wide.
+- **Permissions** are enforced by Postgres row-level security. Datasets are private (owner and team), shared (plus the teams/people it's shared with) or open to any signed-in user (stored as `company`).
 
 ### Ingest
 
