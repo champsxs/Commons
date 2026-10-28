@@ -151,7 +151,7 @@ function FieldsTab({ ds, onChange }: { ds: Detail; onChange: () => void }) {
       </Card>
       {ds.canEdit && !adding && <div><Button onClick={() => setAdding({ key: "new", name: "", type: "text", required: false, unique: false, description: "" })}>Add field</Button></div>}
       {adding && (
-        <Section title="New field" description="New fields start empty. To rename a field, add the new one and deprecate the old one so nothing that uses it breaks.">
+        <Section title="New field" description={<>New fields start empty. To rename a field, add the new one and deprecate the old one so nothing that uses it breaks. <Link to="/help/datasets" className="text-primary hover:underline">More about fields</Link></>}>
           <FieldRow field={adding} datasets={(datasets ?? []).filter((d) => d.slug !== ds.slug)} onChange={(p) => setAdding({ ...adding, ...p })} />
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setAdding(null)}>Cancel</Button>
@@ -210,7 +210,8 @@ function UploadTab({ ds, onUploaded }: { ds: Detail; onUploaded: () => void }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-      <Section title="Upload a file" description={`CSV, JSON or JSON Lines. Columns are matched to fields by name${hasRefs ? "; references by their key, e.g. a city code" : ""}.`}>
+      <Section title="Upload a file"
+        description={<>CSV, JSON or JSON Lines. Columns are matched to fields by name{hasRefs ? "; references by their key, e.g. a city code" : ""}. <Link to="/help/uploading" className="text-primary hover:underline">How the modes treat existing rows</Link></>}>
         <div className="flex flex-col gap-4">
           <Input type="file" accept=".csv,.json,.jsonl,.ndjson" className="py-1.5 h-auto" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setReport(null); }} />
           <div className="grid gap-4 sm:grid-cols-2">

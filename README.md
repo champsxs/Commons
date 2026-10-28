@@ -149,6 +149,12 @@ Every call is recorded in the audit log with the user and client (`web`, `cli`, 
 
 The web app's session has all scopes. Page tokens are read-only and can't use the registry API.
 
+## Help
+
+The web app has built-in help at `/help`, covering getting started, datasets and references, uploading, the CLI, coding agents and MCP, pages, and GraphQL. Commands shown there use this server's real address from `/api/config`, so they work when pasted.
+
+To add a topic, write a component in `apps/web/src/help/sections/`, using the blocks in `apps/web/src/help/content.tsx` (`H2`, `P`, `List`, `Code`, `Table`, `Note`, `HelpLink`). Then add one entry to `HELP_SECTIONS` in `apps/web/src/help/sections.ts`. It appears in the sidebar, the help home page and the topic filter. Link to it from screens with `/help/<id>`.
+
 ## API overview
 
 | | |
@@ -165,6 +171,7 @@ The web app's session has all scopes. Page tokens are read-only and can't use th
 | `POST /api/pages/:slug/versions` | push source; returns build result |
 | `POST /api/pages/:slug/publish` | make a version live |
 | `GET /api/sdk` | UI kit types, GraphQL schema and page template |
+| `GET /api/config` | public addresses (API, web app, page sandbox) |
 | `POST /graphql`, `GET /graphiql` | GraphQL |
 
 ## Known limits of this MVP

@@ -15,6 +15,7 @@ import { SearchBox } from "./components/SearchBox.tsx";
 import { PageList } from "./routes/PageList.tsx";
 import { PageView } from "./routes/PageView.tsx";
 import { CliLogin } from "./routes/CliLogin.tsx";
+import { Help } from "./routes/Help.tsx";
 
 const MeCtx = createContext<{ me: Me; refresh: () => void } | null>(null);
 export const useMe = () => useContext(MeCtx)!;
@@ -41,6 +42,7 @@ function Shell({ children }: { children: ReactNode }) {
           <nav className="flex items-center gap-1">
             {nav("/datasets", "Datasets")}
             {nav("/pages", "Pages")}
+            {nav("/help", "Help")}
           </nav>
           <div className="ml-auto flex items-center gap-3">
             <SearchBox className="hidden md:block w-72" />
@@ -97,6 +99,8 @@ function App() {
             <Route path="/pages/:slug/:tab" element={<PageView />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/cli-login" element={<CliLogin />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/help/:section" element={<Help />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Shell>

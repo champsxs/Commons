@@ -314,6 +314,14 @@ export async function buildApp(opts: { logger?: boolean | { level: string } } = 
   registerDeviceLogin(app);
   registerCliDistribution(app);
 
+  /** Addresses as people's machines see them, so the app shows commands that work as pasted. */
+  app.get("/api/config", async () => ({
+    apiUrl: config.publicApiUrl.replace(/\/$/, ""),
+    webOrigin: config.webOrigin,
+    pagesOrigin: config.pagesOrigin,
+    devLogin: config.devLogin,
+  }));
+
   app.get("/api/health", async () => ({ ok: true }));
 
   return app;

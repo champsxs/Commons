@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Badge, Button, Checkbox, DataTable, Dialog, ErrorState, Field, Input, Page, Section } from "@commons/ui";
 import { api, useApi, type ApiError } from "../api.ts";
 import { VisibilityBadge, timeAgo } from "../components/bits.tsx";
@@ -20,12 +20,13 @@ export function PageList() {
           { key: "publishedVersion", label: "Status", render: (p) => p.publishedVersion ? <Badge tone="success">v{p.publishedVersion} live</Badge> : <Badge>draft</Badge> },
           { key: "updatedAt", label: "Updated", render: (p) => <span className="text-muted-foreground">{timeAgo(p.updatedAt)}</span> },
         ]} />
-      <Section title="Build pages with your coding agent" description="Claude Code, Codex or any agent can explore the data and write pages with the commons CLI.">
-        <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">{`commons login
-commons pages new store-dashboard
-cd store-dashboard
-# ask your agent: "build a page comparing monthly sales by city"
-commons pages push --publish`}</pre>
+      <Section title="Build pages with your coding agent"
+        description="Claude Code, Codex or any other coding agent can explore the data and write pages for you.">
+        <div className="flex flex-wrap gap-2">
+          <Link to="/help/mcp"><Button size="sm">Connect an agent (MCP)</Button></Link>
+          <Link to="/help/cli"><Button size="sm">Set up the CLI</Button></Link>
+          <Link to="/help/pages"><Button size="sm" variant="ghost">How pages work</Button></Link>
+        </div>
       </Section>
       <NewPageDialog open={open} onClose={() => setOpen(false)} onCreated={(slug) => navigate(`/pages/${slug}`)} />
     </Page>

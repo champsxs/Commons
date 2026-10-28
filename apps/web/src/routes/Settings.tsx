@@ -3,9 +3,8 @@ import { Badge, Button, Checkbox, DataTable, ErrorState, Field, Input, Page, Sec
 import { api, useApi, type ApiError } from "../api.ts";
 import { timeAgo } from "../components/bits.tsx";
 import { useMe } from "../main.tsx";
-
-/** Where the API is reachable from people's machines (the app proxies it in development) */
-const API_URL = import.meta.env.VITE_PUBLIC_API_URL ?? "http://localhost:4000";
+import { usePublicConfig } from "../config.ts";
+import { Link } from "react-router";
 
 const SCOPES = [
   { id: "data:read", label: "Read data", hint: "Query datasets you can see" },
@@ -16,6 +15,7 @@ const SCOPES = [
 
 export function Settings() {
   const { me } = useMe();
+  const API_URL = usePublicConfig().apiUrl;
   const tokens = useApi<any[]>("/tokens");
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState(["data:read", "pages:write"]);
@@ -40,7 +40,8 @@ export function Settings() {
       <Section title="Teams">
         <div className="flex flex-wrap gap-2">{me.teams.length ? me.teams.map((t) => <Badge key={t.id}>{t.name}</Badge>) : <span className="text-sm text-muted-foreground">You're not in a team yet.</span>}</div>
       </Section>
-      <Section title="Command line and coding agents" description="The commons CLI lets you and your coding agent explore data and build pages from a terminal. Needs Node.js 22+.">
+      <Section title="Command line and coding agents"
+        description={<>The commons CLI lets you and your coding agent explore data and build pages from a terminal. Needs Node.js 22+. Full guides: <Link to="/help/cli" className="text-primary hover:underline">CLI</Link> · <Link to="/help/mcp" className="text-primary hover:underline">coding agents and MCP</Link></>}>
         <div className="flex flex-col gap-3 text-sm">
           <div>
             <div className="mb-1 text-[13px] font-medium">Install</div>

@@ -170,7 +170,7 @@ export function NewDataset() {
             </div>
           </Section>
 
-          <Section title="Fields" description="Use a reference when a value points at a row in another dataset."
+          <Section title="Fields" description={<>Use a reference when a value points at a row in another dataset. <Link to="/help/datasets" className="text-primary hover:underline">How references work</Link></>}
             actions={<Button size="sm" onClick={() => setFields((f) => [...f, newField()])}>Add field</Button>}>
             <div className="flex flex-col gap-3">
               {fields.map((f, i) => (
