@@ -40,9 +40,10 @@ export function get(obj: unknown, path: string): any {
   return cur;
 }
 
-/** "floorAreaM2" / "floor_area_m2" -> "Floor area m2" */
+/** "floorAreaM2" -> "Floor area m2"; nested paths keep their parent: "city.country.name" -> "Country name" */
 export function humanize(key: string): string {
-  const last = key.split(".").pop()!;
+  const parts = key.split(".");
+  const last = parts.length > 1 && /^(name|title|label|code)$/.test(parts[parts.length - 1]) ? parts.slice(-2).join(" ") : parts[parts.length - 1];
   const words = last.replace(/_/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

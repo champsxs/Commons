@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "types": [],
+    "paths": { "@commons/ui": ["./.commons/types/index.d.ts"] }
+  },
+  "include": ["*.ts", "*.tsx", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", ".commons"]
+}

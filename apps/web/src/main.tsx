@@ -12,6 +12,8 @@ import { DatasetDetail } from "./routes/DatasetDetail.tsx";
 import { RecordPage } from "./routes/RecordPage.tsx";
 import { Settings } from "./routes/Settings.tsx";
 import { SearchBox } from "./components/SearchBox.tsx";
+import { PageList } from "./routes/PageList.tsx";
+import { PageView } from "./routes/PageView.tsx";
 
 const MeCtx = createContext<{ me: Me; refresh: () => void } | null>(null);
 export const useMe = () => useContext(MeCtx)!;
@@ -88,7 +90,10 @@ function App() {
             <Route path="/datasets/:slug" element={<DatasetDetail />} />
             <Route path="/datasets/:slug/:tab" element={<DatasetDetail />} />
             <Route path="/datasets/:slug/records/:id" element={<RecordPage />} />
-            <Route path="/pages/*" element={<PagesPlaceholder />} />
+            <Route path="/pages" element={<PageList />} />
+            <Route path="/pages/:slug" element={<PageView />} />
+            <Route path="/pages/:slug/v/:version" element={<PageView />} />
+            <Route path="/pages/:slug/:tab" element={<PageView />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -96,10 +101,6 @@ function App() {
       </CommonsProvider>
     </MeCtx.Provider>
   );
-}
-
-function PagesPlaceholder() {
-  return <div className="mx-auto max-w-7xl px-8 py-10 text-sm text-muted-foreground">Pages arrive in the next milestone.</div>;
 }
 
 function NotFound() {

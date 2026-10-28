@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "Only for local type checking. Commons builds the page on the server.",
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "5.9.3"
+  }
+}

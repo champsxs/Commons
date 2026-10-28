@@ -17,6 +17,7 @@ import type { Db } from "../db/pool.ts";
 import { search, suggest } from "../registry/search.ts";
 import { inferFields, parseFile } from "../ingest/parse.ts";
 import { ingest } from "../ingest/ingest.ts";
+import { registerPageRoutes } from "../pages/routes.ts";
 
 const namesFor = (ds: Dataset) =>
   graphqlNames(ds.typeName, ds.fields.map((f) => ({ name: f.name, column: f.column, reference: f.type === "reference" })));
@@ -304,6 +305,8 @@ export async function buildApp(opts: { logger?: boolean | { level: string } } = 
     reply.type("text/plain");
     return schemaSDL();
   });
+
+  registerPageRoutes(app);
 
   app.get("/api/health", async () => ({ ok: true }));
 
