@@ -58,7 +58,8 @@ export function PageFrame({ slug, version }: { slug: string; version?: number })
   return (
     <div className="flex flex-col gap-3">
       {crash && <ErrorState error={`The page's code crashed: ${crash}`} />}
-      <iframe ref={frame} key={view.versionId} src={src} title={slug} sandbox="allow-scripts"
+      {/* allow-forms lets <form onSubmit> run in page code; the page's CSP (form-action 'none') still stops forms posting anywhere */}
+      <iframe ref={frame} key={view.versionId} src={src} title={slug} sandbox="allow-scripts allow-forms"
         className="-mx-4 w-[calc(100%+2rem)] sm:-mx-6 sm:w-[calc(100%+3rem)] lg:-mx-8 lg:w-[calc(100%+4rem)]" style={{ height }} />
     </div>
   );
