@@ -12,20 +12,48 @@ import { registerGraphqlGuard } from "../graphql/guard.ts";
 import {
   addField, createDataset, deleteDataset, dropField, getDataset, listDatasets, updateDataset, updateField, usage,
 } from "../registry/datasets.ts";
-import type { Dataset } from "../registry/model.ts";
+import { loadDataset, type Dataset } from "../registry/model.ts";
+import type { Db } from "../db/pool.ts";
 import { search, suggest } from "../registry/search.ts";
 import { inferFields, parseFile } from "../ingest/parse.ts";
 import { ingest } from "../ingest/ingest.ts";
 
-export function withGraphql(ds: Dataset) {
-  return {
-    ...ds,
-    graphql: graphqlNames(
-      ds.typeName,
-      ds.fields.map((f) => ({ name: f.name, column: f.column, reference: f.type === "reference" })),
-    ),
-  };
+const namesFor = (ds: Dataset) =>
+  graphqlNames(ds.typeName, ds.fields.map((f) => ({ name: f.name, column: f.column, reference: f.type === "reference" })));
+
+/** The field people recognise a row by: name/title/label if there is one, otherwise the key. */
+export function displayField(ds: Dataset): string {
+  const text = ds.fields.filter((f) => f.type === "text" && !f.deprecated);
+  return (
+    text.find((f) => ["name", "title", "label"].includes(f.name)) ??
+    text.find((f) => /_(name|title)$/.test(f.name))
+  )?.name ?? ds.keyField ?? "id";
 }
+
+/** Dataset plus everything a client needs to query it: GraphQL names and how to show referenced rows. */
+export async function describe(db: Db, ds: Dataset) {
+  const references: Record<string, unknown> = {};
+  for (const f of ds.fields.filter((x) => x.reference)) {
+    const target = await loadDataset(db, f.reference!.toSlug);
+    const names = namesFor(target);
+    const label = displayField(target);
+    const { rows } = await db.query("select commons.can_view_dataset($1) as ok", [target.id]);
+    references[f.name] = {
+      dataset: target.slug,
+      datasetName: target.name,
+      canView: rows[0].ok,
+      matchField: f.reference!.toField,
+      labelField: label,
+      graphql: names && {
+        type: names.type, listField: names.listField, byIdField: names.byIdField,
+        label: label === "id" ? "id" : names.fields[label], match: f.reference!.toField === "id" ? "id" : names.fields[f.reference!.toField],
+      },
+    };
+  }
+  return { ...ds, displayField: displayField(ds), graphql: namesFor(ds), references };
+}
+
+export const withGraphql = (userId: string, ds: Dataset) => asUser(userId, (db) => describe(db, ds));
 
 async function readUpload(req: any): Promise<{ buf: Buffer; filename: string; fields: Record<string, string> }> {
   const fields: Record<string, string> = {};
@@ -41,7 +69,7 @@ async function readUpload(req: any): Promise<{ buf: Buffer; filename: string; fi
   return { buf, filename, fields };
 }
 
-export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
+export async function buildApp(opts: { logger?: boolean | { level: string } } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 10 * 1024 * 1024 });
   await app.register(cookie);
   await app.register(cors, { origin: [config.webOrigin, config.pagesOrigin], credentials: true });
@@ -165,7 +193,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     const ds = await asUser(a.userId, (db) => createDataset(db, a.userId, req.body));
     await rebuildSchema();
     reply.status(201);
-    return withGraphql(ds);
+    return withGraphql(a.userId, ds);
   });
 
   app.get("/api/datasets/:slug", async (req) => {
@@ -174,14 +202,20 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     return asUser(a.userId, async (db) => {
       const ds = await getDataset(db, slug);
       const { rows } = await db.query("select commons.row_count($1) as n", [ds.slug]);
-      return { ...withGraphql(ds), rowCount: Number(rows[0].n) };
+      const shares = await db.query(
+        `select s.team_id as "teamId", s.user_id as "userId", s.can_edit as "canEdit", coalesce(t.name, u.name) as name
+         from commons.dataset_shares s left join commons.teams t on t.id = s.team_id left join commons.users u on u.id = s.user_id
+         where s.dataset_id = $1 order by name`,
+        [ds.id],
+      );
+      return { ...(await describe(db, ds)), rowCount: Number(rows[0].n), shares: shares.rows };
     });
   });
 
   app.patch("/api/datasets/:slug", async (req) => {
     const a = requireAuth(req, "datasets:write");
     const ds = await asUser(a.userId, (db) => updateDataset(db, a.userId, (req.params as any).slug, req.body ?? {}));
-    return withGraphql(ds);
+    return withGraphql(a.userId, ds);
   });
 
   app.delete("/api/datasets/:slug", async (req) => {
@@ -202,7 +236,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     const ds = await asUser(a.userId, (db) => addField(db, a.userId, (req.params as any).slug, req.body));
     await rebuildSchema();
     reply.status(201);
-    return withGraphql(ds);
+    return withGraphql(a.userId, ds);
   });
 
   app.patch("/api/datasets/:slug/fields/:name", async (req) => {
@@ -210,7 +244,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     const { slug, name } = req.params as any;
     const ds = await asUser(a.userId, (db) => updateField(db, a.userId, slug, name, req.body ?? {}));
     await rebuildSchema();
-    return withGraphql(ds);
+    return withGraphql(a.userId, ds);
   });
 
   app.delete("/api/datasets/:slug/fields/:name", async (req) => {
@@ -218,7 +252,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     const { slug, name } = req.params as any;
     const ds = await asUser(a.userId, (db) => dropField(db, a.userId, slug, name, (req.query as any).force === "true"));
     await rebuildSchema();
-    return withGraphql(ds);
+    return withGraphql(a.userId, ds);
   });
 
   // ---- Ingest ----

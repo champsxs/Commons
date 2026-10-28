@@ -97,12 +97,15 @@ export function inferFields(rows: RawRow[]) {
     else if (all((v) => /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(String(v)))) type = "timestamp";
     else if (all((v) => typeof v === "object")) type = "json";
     const distinct = new Set(strs.map((v) => JSON.stringify(v))).size;
+    const name = toFieldName(header);
+    // Small files make every column look unique, so only suggest it for identifier-like columns
+    const looksLikeId = position === 0 || /(^|_)(id|code|key|sku|number|no|email|slug)$/.test(name);
     return {
       header,
-      name: toFieldName(header),
+      name,
       type,
       required: values.length === sample.length && sample.length > 0,
-      unique: values.length > 1 && distinct === values.length && type !== "boolean",
+      unique: values.length > 1 && distinct === values.length && (type === "text" || type === "integer") && looksLikeId,
       position,
       examples: [...new Set(strs.slice(0, 50).map(String))].slice(0, 3),
     };

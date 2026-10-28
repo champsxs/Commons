@@ -117,10 +117,15 @@ const unwrap = (t: GraphQLType): GraphQLType => (isNonNullType(t) || isListType(
 export interface GraphqlNames {
   type: string;
   listField: string | null;
+  /** Enum for sorting the list, e.g. StoreOrderBy */
+  orderBy: string | null;
   byIdField: string | null;
   fields: Record<string, string>;
   /** Back-relations: other datasets' rows pointing here */
   related: { field: string; type: string }[];
+  /** Input field names for create/update, keyed by dataset field (references use the id column, e.g. cityId) */
+  inputs: Record<string, string>;
+  mutations: { create: string | null; update: string | null; delete: string | null; inputField: string | null; patchField: string | null };
 }
 
 /** Finds what PostGraphile called things for a dataset, so the UI and agents don't have to guess. */
@@ -158,5 +163,24 @@ export function graphqlNames(typeName: string, columns: { name: string; column: 
       if (node && isObjectType(node)) related.push({ field: name, type: node.name });
     }
   }
-  return { type: typeName, listField, byIdField, fields, related };
+  const mutationFields = schema.getMutationType()?.getFields() ?? {};
+  const find = (name: string) => (mutationFields[name] ? name : null);
+  const create = find(`create${typeName}`);
+  const update = find(`update${typeName}ById`);
+  const del = find(`delete${typeName}ById`);
+  const inputObj = (m: string | null) => {
+    const arg = m ? mutationFields[m].args.find((a) => a.name === "input") : undefined;
+    const t = arg ? unwrap(arg.type) : undefined;
+    return t && "getFields" in t ? Object.keys((t as any).getFields()) : [];
+  };
+  const inputField = inputObj(create).find((k) => k !== "clientMutationId") ?? null;
+  const patchField = inputObj(update).find((k) => k.endsWith("Patch")) ?? null;
+  const inputs: Record<string, string> = {};
+  for (const c of columns) {
+    const match = Object.keys(typeFields).find((k) => lower(k) === lower(c.column));
+    if (match) inputs[c.name] = match;
+  }
+  const orderArg = listField ? query[listField].args.find((a) => a.name === "orderBy") : undefined;
+  const orderBy = orderArg ? (unwrap(orderArg.type) as any).name : null;
+  return { type: typeName, listField, orderBy, byIdField, fields, related, inputs, mutations: { create, update, delete: del, inputField, patchField } };
 }

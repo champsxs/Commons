@@ -10,7 +10,7 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:reset": "pnpm --filter @commons/api reset && pnpm --filter @commons/api seed",
-    "dev": "pnpm --filter @commons/api dev",
+    "dev": "pnpm -r --parallel --filter @commons/api --filter @commons/web dev",
     "seed": "pnpm --filter @commons/api seed",
     "test": "pnpm --filter @commons/api test",
     "typecheck": "pnpm -r typecheck"
