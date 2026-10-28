@@ -50,6 +50,7 @@ export interface Me {
   name: string;
   is_admin: boolean;
   teams: { id: string; slug: string; name: string }[];
+  departments: { id: string; slug: string; name: string }[];
 }
 
 export interface DatasetSummary {
@@ -57,7 +58,8 @@ export interface DatasetSummary {
   slug: string;
   name: string;
   description: string;
-  visibility: "private" | "shared" | "company";
+  visibility: "private" | "shared" | "department" | "company";
+  departmentName: string | null;
   updatedAt: string;
   keyField: string | null;
   ownerName: string;

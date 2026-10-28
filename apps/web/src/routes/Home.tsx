@@ -3,14 +3,15 @@ import { Link } from "react-router";
 import { Badge, Button, EmptyState, Skeleton } from "@commons/ui";
 import { useApi, type DatasetSummary } from "../api.ts";
 import { SearchBox } from "../components/SearchBox.tsx";
-import { VISIBILITY, VisibilityBadge, timeAgo } from "../components/bits.tsx";
+import { VisibilityBadge, timeAgo, visibilityLabel } from "../components/bits.tsx";
 import { useMe } from "../main.tsx";
 
 interface PageSummary {
   slug: string;
   title: string;
   description: string;
-  visibility: "private" | "shared" | "company";
+  visibility: "private" | "shared" | "department" | "company";
+  departmentName: string | null;
   updatedAt: string;
   ownerName: string;
   teamName: string | null;
@@ -46,7 +47,7 @@ export function Home() {
           empty={<EmptyState title="No datasets yet" description="Create one from a file or by listing its fields."
             action={<Link to="/datasets/new"><Button size="sm" variant="primary">New dataset</Button></Link>} />}>
           {byUpdated(datasets.data).map((d) => (
-            <Row key={d.slug} to={`/datasets/${d.slug}`} title={d.name} badge={<VisibilityBadge value={d.visibility} />}
+            <Row key={d.slug} to={`/datasets/${d.slug}`} title={d.name} badge={<VisibilityBadge value={d.visibility} department={d.departmentName} />}
               description={d.description || "No description"}
               meta={[`${d.approxRows.toLocaleString()} rows`, d.usedByCount > 0 ? `used by ${d.usedByCount}` : null, d.teamName ?? d.ownerName]}
               time={d.updatedAt} />
@@ -66,7 +67,7 @@ export function Home() {
             <Row key={p.slug} to={`/pages/${p.slug}`} title={p.title}
               badge={p.publishedVersion ? <Badge tone="success">v{p.publishedVersion} live</Badge> : <Badge>draft</Badge>}
               description={p.description || p.slug}
-              meta={[p.teamName ?? p.ownerName, VISIBILITY[p.visibility].label.toLowerCase(),
+              meta={[p.teamName ?? p.ownerName, visibilityLabel(p.visibility, p.departmentName),
                 p.latestVersion && p.latestVersion !== p.publishedVersion ? `v${p.latestVersion} in progress` : null]}
               time={p.updatedAt} />
           ))}

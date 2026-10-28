@@ -28,7 +28,7 @@ export interface DatasetMeta {
   description: string;
   keyField: string | null;
   displayField: string;
-  visibility: "private" | "shared" | "company";
+  visibility: "private" | "shared" | "department" | "company";
   canEdit: boolean;
   fields: DatasetField[];
   references: Record<string, ReferenceInfo>;

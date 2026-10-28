@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from "react-router";
 import { Badge, Button, Card, Checkbox, ErrorState, Field, Input, Loading, Section, Select, Tabs, Textarea, cn } from "@commons/ui";
 import { api, useApi, type ApiError } from "../api.ts";
 import { PageFrame } from "../components/PageFrame.tsx";
-import { VisibilityBadge, timeAgo, visibilityOptions } from "../components/bits.tsx";
+import { VisibilityBadge, timeAgo } from "../components/bits.tsx";
+import { VisibilityPicker } from "../components/VisibilityPicker.tsx";
 
 interface Version {
   id: string;
@@ -25,7 +26,9 @@ interface PageDetail {
   ownerName: string;
   teamId: string | null;
   teamName: string | null;
-  visibility: "private" | "shared" | "company";
+  visibility: "private" | "shared" | "department" | "company";
+  departmentId: string | null;
+  departmentName: string | null;
   allowWrites: boolean;
   publishedVersionId: string | null;
   publishedVersion: number | null;
@@ -52,7 +55,7 @@ export function PageView() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{page.title}</h1>
-            <VisibilityBadge value={page.visibility} />
+            <VisibilityBadge value={page.visibility} department={page.departmentName} />
             {isPreview && <Badge tone="warning">Previewing v{version}</Badge>}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -149,7 +152,7 @@ function Versions({ page, onChange }: { page: PageDetail; onChange: () => void }
 
 function PageSettings({ page, onChange }: { page: PageDetail; onChange: () => void }) {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ title: page.title, description: page.description, visibility: page.visibility, allowWrites: page.allowWrites });
+  const [form, setForm] = useState({ title: page.title, description: page.description, visibility: page.visibility, departmentId: page.departmentId, allowWrites: page.allowWrites });
   const [error, setError] = useState<ApiError | null>(null);
   const [saved, setSaved] = useState(false);
   return (
@@ -158,9 +161,8 @@ function PageSettings({ page, onChange }: { page: PageDetail; onChange: () => vo
         <div className="grid gap-4">
           <Field label="Title"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
           <Field label="Description"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-          <Field label="Who can see it">
-            <Select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as any })} options={visibilityOptions(["company", "private"])} />
-          </Field>
+          <VisibilityPicker value={{ visibility: form.visibility, departmentId: form.departmentId }} teamId={page.teamId}
+            levels={["company", "department", "private"]} onChange={(v) => setForm({ ...form, ...v })} />
           <Checkbox checked={form.allowWrites} onChange={(v) => setForm({ ...form, allowWrites: v })}
             label={<span>Allow this page to change data <span className="text-muted-foreground">· viewers can then edit rows they have access to through it</span></span>} />
         </div>

@@ -18,7 +18,7 @@ export function PageList() {
         columns={[
           { key: "title", render: (p) => <div><div className="font-medium">{p.title}</div><div className="text-xs text-muted-foreground">{p.description || p.slug}</div></div> },
           { key: "teamName", label: "Team", render: (p) => p.teamName ?? p.ownerName },
-          { key: "visibility", render: (p) => <VisibilityBadge value={p.visibility} /> },
+          { key: "visibility", render: (p) => <VisibilityBadge value={p.visibility} department={p.departmentName} /> },
           { key: "publishedVersion", label: "Status", render: (p) => p.publishedVersion ? <Badge tone="success">v{p.publishedVersion} live</Badge> : <Badge>draft</Badge> },
           { key: "updatedAt", label: "Updated", render: (p) => <span className="text-muted-foreground">{timeAgo(p.updatedAt)}</span> },
         ]} />

@@ -17,6 +17,17 @@ const dim = (s: string) => (process.stdout.isTTY ? `\x1b[2m${s}\x1b[0m` : s);
 const red = (s: string) => (process.stdout.isTTY ? `\x1b[31m${s}\x1b[0m` : s);
 const green = (s: string) => (process.stdout.isTTY ? `\x1b[32m${s}\x1b[0m` : s);
 
+const visibilityText = (d: { visibility: string; departmentName?: string | null }) =>
+  d.visibility === "company" ? "any signed-in user" : d.visibility === "department" ? `department users (${d.departmentName})` : d.visibility;
+
+/** Accepts a department's slug or name and returns its id. */
+async function departmentId(c: Commons, nameOrSlug: string): Promise<string> {
+  const all: { id: string; slug: string; name: string; mine: boolean }[] = await c.get("/api/departments");
+  const d = all.find((x) => x.slug === nameOrSlug || x.name.toLowerCase() === nameOrSlug.toLowerCase());
+  if (!d) throw new Error(`No department "${nameOrSlug}". Yours: ${all.filter((x) => x.mine).map((x) => x.slug).join(", ") || "none"}`);
+  return d.id;
+}
+
 function run(fn: (...args: any[]) => Promise<void>) {
   return async (...args: any[]) => {
     try {
@@ -116,7 +127,7 @@ datasets
     const list = await c.get("/api/datasets");
     if (opts.json) return print(list);
     for (const d of list) {
-      console.log(`${d.slug.padEnd(24)} ${d.name.padEnd(28)} ${String(d.approxRows).padStart(8)} rows  ${dim(`${d.visibility === "company" ? "any signed-in user" : d.visibility} · ${d.teamName ?? d.ownerName}`)}`);
+      console.log(`${d.slug.padEnd(24)} ${d.name.padEnd(28)} ${String(d.approxRows).padStart(8)} rows  ${dim(`${visibilityText(d)} · ${d.teamName ?? d.ownerName}`)}`);
     }
   }));
 
@@ -129,7 +140,7 @@ datasets
     const d = await c.get(`/api/datasets/${slug}`);
     if (opts.json) return print(d);
     const g = d.graphql;
-    console.log(`${d.name} (${d.slug}) · ${d.rowCount} rows · ${d.visibility === "company" ? "any signed-in user" : d.visibility}`);
+    console.log(`${d.name} (${d.slug}) · ${d.rowCount} rows · ${visibilityText(d)}`);
     if (d.description) console.log(dim(d.description));
     console.log(`\nGraphQL: type ${g.type} · list ${g.listField} · one row ${g.byIdField}(id:) · sort ${g.orderBy}`);
     console.log("\nFields:");
@@ -187,7 +198,8 @@ datasets
   .requiredOption("--name <name>", "dataset name")
   .option("--slug <slug>", "dataset id (default: from the name)")
   .option("--key <field>", "key field (default: guessed)")
-  .option("--visibility <v>", "private, shared, or company (any signed-in user)", "private")
+  .option("--visibility <v>", "private, shared, department, or company (any signed-in user)", "private")
+  .option("--department <name>", "with --visibility department: which of your departments (name or slug)")
   .option("--description <text>", "what's in it")
   .option("--link <field=dataset>", "make a column a reference, e.g. city_code=cities (repeatable)", (v: string, all: string[]) => [...all, v], [] as string[])
   .option("--yes", "accept every suggested link to an existing dataset")
@@ -218,6 +230,7 @@ datasets
     });
     const ds = await c.post("/api/datasets", {
       name: opts.name, slug: opts.slug, description: opts.description ?? "", visibility: opts.visibility,
+      departmentId: opts.visibility === "department" ? await departmentId(c, opts.department ?? "") : undefined,
       keyField: links.has(keyField) ? null : keyField, fields,
     });
     console.log(green(`Created ${ds.slug} with ${ds.fields.length} fields`) + dim(` (${ds.fields.map((f: any) => f.type === "reference" ? `${f.name} → ${f.reference?.toSlug}` : f.name).join(", ")})`));

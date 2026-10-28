@@ -21,6 +21,7 @@ import { registerPageRoutes } from "../pages/routes.ts";
 import { registerMcpRoute } from "../mcp.ts";
 import { registerDeviceLogin } from "../auth/device.ts";
 import { registerCliDistribution } from "../cli-dist.ts";
+import { departmentsOf, registerDepartmentRoutes } from "../registry/departments.ts";
 
 const namesFor = (ds: Dataset) =>
   graphqlNames(ds.typeName, ds.fields.map((f) => ({ name: f.name, column: f.column, reference: f.type === "reference" })));
@@ -137,7 +138,7 @@ export async function buildApp(opts: { logger?: boolean | { level: string } } = 
        where u.id = $1 group by u.id`,
       [a.userId],
     );
-    return { ...rows[0], client: a.client, scopes: a.scopes };
+    return { ...rows[0], departments: await departmentsOf(a.userId), client: a.client, scopes: a.scopes };
   });
 
   app.get("/api/tokens", async (req) => {
@@ -313,6 +314,7 @@ export async function buildApp(opts: { logger?: boolean | { level: string } } = 
   registerMcpRoute(app);
   registerDeviceLogin(app);
   registerCliDistribution(app);
+  registerDepartmentRoutes(app);
 
   /** Addresses as people's machines see them, so the app shows commands that work as pasted. */
   app.get("/api/config", async () => ({

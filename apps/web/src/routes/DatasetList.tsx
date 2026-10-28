@@ -15,7 +15,7 @@ export function DatasetList() {
         columns={[
           { key: "name", render: (d) => <div><div className="font-medium">{d.name}</div><div className="text-xs text-muted-foreground line-clamp-1">{d.description}</div></div> },
           { key: "teamName", label: "Team", render: (d) => d.teamName ?? d.ownerName },
-          { key: "visibility", render: (d) => <VisibilityBadge value={d.visibility} /> },
+          { key: "visibility", render: (d) => <VisibilityBadge value={d.visibility} department={d.departmentName} /> },
           { key: "approxRows", label: "Rows", format: "integer" },
           { key: "usedByCount", label: "Used by", format: "integer" },
           { key: "updatedAt", label: "Updated", render: (d) => <span className="text-muted-foreground">{timeAgo(d.updatedAt)}</span> },

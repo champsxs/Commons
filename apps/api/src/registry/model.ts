@@ -37,7 +37,7 @@ export const FieldInput = z.object({
 });
 export type FieldInput = z.infer<typeof FieldInput>;
 
-export const Visibility = z.enum(["private", "shared", "company"]);
+export const Visibility = z.enum(["private", "shared", "department", "company"]);
 
 export const DatasetInput = z.object({
   slug: z.string().regex(/^[a-z][a-z0-9_]{1,50}$/).optional(),
@@ -45,6 +45,8 @@ export const DatasetInput = z.object({
   description: z.string().default(""),
   visibility: Visibility.default("private"),
   teamId: z.string().uuid().nullish(),
+  /** Required when visibility is "department": which of the owner's departments can see it */
+  departmentId: z.string().uuid().nullish(),
   keyField: z.string().nullish(),
   referenceable: z.boolean().default(true),
   license: z.string().nullish(),
@@ -90,7 +92,9 @@ export interface Dataset {
   ownerName: string;
   teamId: string | null;
   teamName: string | null;
-  visibility: "private" | "shared" | "company";
+  visibility: "private" | "shared" | "department" | "company";
+  departmentId: string | null;
+  departmentName: string | null;
   referenceable: boolean;
   keyField: string | null;
   typeName: string;
@@ -140,10 +144,11 @@ export async function loadLinksTo(db: Db, datasetId: string): Promise<Link[]> {
 export async function loadDataset(db: Db, slugOrId: string): Promise<Dataset> {
   const byId = /^[0-9a-f-]{36}$/.test(slugOrId);
   const { rows } = await db.query(
-    `select d.*, u.name as owner_name, t.name as team_name, commons.can_edit_dataset(d.id) as can_edit
+    `select d.*, u.name as owner_name, t.name as team_name, dep.name as department_name, commons.can_edit_dataset(d.id) as can_edit
      from commons.datasets d
      join commons.users u on u.id = d.owner_id
      left join commons.teams t on t.id = d.team_id
+     left join commons.departments dep on dep.id = d.department_id
      where ${byId ? "d.id" : "d.slug"} = $1`,
     [slugOrId],
   );
@@ -163,6 +168,8 @@ export async function loadDataset(db: Db, slugOrId: string): Promise<Dataset> {
     teamId: d.team_id,
     teamName: d.team_name,
     visibility: d.visibility,
+    departmentId: d.department_id,
+    departmentName: d.department_name,
     referenceable: d.referenceable,
     keyField: d.key_field,
     typeName: d.type_name,

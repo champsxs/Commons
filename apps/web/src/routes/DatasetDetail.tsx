@@ -5,7 +5,8 @@ import {
   Textarea, clearDatasetCache, listQuery, type DatasetMeta,
 } from "@commons/ui";
 import { api, upload, useApi, type ApiError, type DatasetSummary } from "../api.ts";
-import { TYPE_LABELS, VisibilityBadge, timeAgo, visibilityOptions } from "../components/bits.tsx";
+import { TYPE_LABELS, VisibilityBadge, timeAgo } from "../components/bits.tsx";
+import { VisibilityPicker } from "../components/VisibilityPicker.tsx";
 import { IngestReportView, type IngestReport } from "../components/IngestReport.tsx";
 import { FieldRow, type FieldDraft } from "./NewDataset.tsx";
 import { useMe } from "../main.tsx";
@@ -14,6 +15,8 @@ type Detail = Omit<DatasetMeta, "fields"> & {
   ownerName: string; teamId: string | null; teamName: string | null; license: string | null; source: string | null;
   referenceable: boolean; rowCount: number; updatedAt: string; createdAt: string;
   shares: { teamId: string | null; userId: string | null; name: string; canEdit: boolean }[];
+  departmentId: string | null;
+  departmentName: string | null;
   fields: (DatasetMeta["fields"][number] & { reference?: { toSlug: string; toField: string; onDelete: string; unresolved: string } })[];
 };
 
@@ -38,7 +41,7 @@ export function DatasetDetail() {
 
   return (
     <Page
-      title={<span className="flex flex-wrap items-center gap-3">{ds.name}<VisibilityBadge value={ds.visibility} /></span>}
+      title={<span className="flex flex-wrap items-center gap-3">{ds.name}<VisibilityBadge value={ds.visibility} department={ds.departmentName} /></span>}
       description={
         <span className="flex flex-wrap gap-x-3 gap-y-1">
           {ds.description && <span className="w-full">{ds.description}</span>}
@@ -313,7 +316,7 @@ function SettingsTab({ ds, onChange }: { ds: Detail; onChange: () => void }) {
   const navigate = useNavigate();
   const teams = useApi<{ id: string; name: string }[]>("/teams");
   const users = useApi<{ id: string; name: string; email: string }[]>("/users");
-  const [form, setForm] = useState({ name: ds.name, description: ds.description, visibility: ds.visibility, teamId: ds.teamId ?? "", referenceable: ds.referenceable, source: ds.source ?? "", license: ds.license ?? "" });
+  const [form, setForm] = useState({ name: ds.name, description: ds.description, visibility: ds.visibility, departmentId: ds.departmentId, teamId: ds.teamId ?? "", referenceable: ds.referenceable, source: ds.source ?? "", license: ds.license ?? "" });
   const [error, setError] = useState<ApiError | null>(null);
   const [saved, setSaved] = useState(false);
   const [shareWith, setShareWith] = useState("");
@@ -353,9 +356,8 @@ function SettingsTab({ ds, onChange }: { ds: Detail; onChange: () => void }) {
       </Section>
       <Section title="Access">
         <div className="flex flex-col gap-4">
-          <Field label="Who can see it">
-            <Select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value as any })} options={visibilityOptions()} />
-          </Field>
+          <VisibilityPicker value={{ visibility: form.visibility, departmentId: form.departmentId }} teamId={form.teamId}
+            onChange={(v) => setForm({ ...form, ...v })} />
           <Checkbox label="Other datasets may reference this one" checked={form.referenceable} onChange={(v) => setForm({ ...form, referenceable: v })} />
           {form.visibility === "shared" && (
             <Field label="Share with" hint="Shares take effect when you save.">

@@ -24,11 +24,17 @@ export function GettingStarted() {
         rows={[
           ["Private", "The owner and the owning team"],
           ["Shared", "The owning team, plus the people and teams it's shared with"],
+          ["Department users (name)", "Everyone in that department, whether through one of its teams or added individually"],
           ["Any signed-in user", "Everyone who can sign in to Commons"],
         ]}
       />
       <P>
-        Only the owner, the owning team, and people given edit access can change a dataset. These rules apply everywhere: in
+        Departments are groups of teams (Retail might include Retail Operations and Store Analytics), and can also include
+        individual people. Admins set them up under Settings. When you choose "Department users", you pick one of the
+        departments you belong to.
+      </P>
+      <P>
+        Seeing is not editing: only the owner, the owning team, and people given edit access can change a dataset. These rules apply everywhere: in
         the app, in GraphQL, in the CLI, to coding agents, and inside pages. A page shows each viewer only the data they're
         allowed to see.
       </P>

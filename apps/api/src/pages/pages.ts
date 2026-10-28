@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Db } from "../db/pool.ts";
 import { asUser, pool } from "../db/pool.ts";
 import { badRequest, forbidden, notFound } from "../util/errors.ts";
-import { audit } from "../registry/datasets.ts";
+import { audit, checkDepartment } from "../registry/datasets.ts";
 import { getSchema, graphqlNames } from "../graphql/schema.ts";
 import { columnFor } from "../registry/model.ts";
 import { buildPage, formatIssues, type BuildOutput, type TypeMapEntry } from "./build.ts";
@@ -15,8 +15,9 @@ export const PageInput = z.object({
   slug: z.string().regex(/^[a-z][a-z0-9-]{1,60}$/, "Use lowercase letters, digits and dashes"),
   title: z.string().min(1),
   description: z.string().default(""),
-  visibility: z.enum(["private", "shared", "company"]).default("private"),
+  visibility: z.enum(["private", "shared", "department", "company"]).default("private"),
   teamId: z.string().uuid().nullish(),
+  departmentId: z.string().uuid().nullish(),
 });
 
 export const VersionInput = z.object({
@@ -45,9 +46,10 @@ async function canEditPage(db: Db, pageId: string, userId: string) {
 
 export async function loadPage(db: Db, slug: string, userId: string) {
   const { rows } = await db.query(
-    `select p.*, u.name as owner_name, t.name as team_name, commons.can_view_page(p.id) as can_view,
+    `select p.*, u.name as owner_name, t.name as team_name, dep.name as department_name, commons.can_view_page(p.id) as can_view,
             v.version as published_version
      from commons.pages p join commons.users u on u.id = p.owner_id left join commons.teams t on t.id = p.team_id
+     left join commons.departments dep on dep.id = p.department_id
      left join commons.page_versions v on v.id = p.published_version_id
      where p.slug = $1`,
     [slug],
@@ -59,17 +61,19 @@ export async function loadPage(db: Db, slug: string, userId: string) {
   return {
     id: p.id as string, slug: p.slug as string, title: p.title as string, description: p.description as string,
     ownerId: p.owner_id as string, ownerName: p.owner_name as string, teamId: p.team_id as string | null, teamName: p.team_name as string | null,
-    visibility: p.visibility as string, allowWrites: p.allow_writes as boolean, publishedVersionId: p.published_version_id as string | null,
+    visibility: p.visibility as string, departmentId: p.department_id as string | null, departmentName: p.department_name as string | null,
+    allowWrites: p.allow_writes as boolean, publishedVersionId: p.published_version_id as string | null,
     publishedVersion: p.published_version as number | null, updatedAt: p.updated_at, createdAt: p.created_at, canEdit,
   };
 }
 
 export async function listPages(db: Db, userId: string) {
   const { rows } = await db.query(
-    `select p.slug, p.title, p.description, p.visibility, p.updated_at, u.name as owner_name, t.name as team_name,
+    `select p.slug, p.title, p.description, p.visibility, p.updated_at, u.name as owner_name, t.name as team_name, dep.name as department_name,
             v.version as published_version,
             (select max(version) from commons.page_versions pv where pv.page_id = p.id) as latest_version
      from commons.pages p join commons.users u on u.id = p.owner_id left join commons.teams t on t.id = p.team_id
+     left join commons.departments dep on dep.id = p.department_id
      left join commons.page_versions v on v.id = p.published_version_id
      where (p.published_version_id is not null and commons.can_view_page(p.id))
         or p.owner_id = $1 or exists (select 1 from commons.team_members m where m.team_id = p.team_id and m.user_id = $1)
@@ -77,7 +81,7 @@ export async function listPages(db: Db, userId: string) {
     [userId],
   );
   return rows.map((r) => ({
-    slug: r.slug, title: r.title, description: r.description, visibility: r.visibility, updatedAt: r.updated_at,
+    slug: r.slug, title: r.title, description: r.description, visibility: r.visibility, departmentName: r.department_name, updatedAt: r.updated_at,
     ownerName: r.owner_name, teamName: r.team_name, publishedVersion: r.published_version, latestVersion: r.latest_version,
   }));
 }
@@ -86,9 +90,11 @@ export async function createPage(db: Db, userId: string, raw: unknown) {
   const input = PageInput.parse(raw);
   const exists = await db.query("select 1 from commons.pages where slug = $1", [input.slug]);
   if (exists.rows.length) throw badRequest(`A page called "${input.slug}" already exists`);
+  await checkDepartment(db, userId, input.visibility, input.departmentId);
   await db.query(
-    `insert into commons.pages (slug, title, description, owner_id, team_id, visibility) values ($1,$2,$3,$4,$5,$6)`,
-    [input.slug, input.title, input.description, userId, input.teamId ?? null, input.visibility],
+    `insert into commons.pages (slug, title, description, owner_id, team_id, visibility, department_id) values ($1,$2,$3,$4,$5,$6,$7)`,
+    [input.slug, input.title, input.description, userId, input.teamId ?? null, input.visibility,
+     input.visibility === "department" ? input.departmentId : null],
   );
   await audit(db, userId, "page.create", { slug: input.slug });
   return loadPage(db, input.slug, userId);
@@ -98,12 +104,17 @@ export async function updatePage(db: Db, userId: string, slug: string, raw: any)
   const page = await loadPage(db, slug, userId);
   if (!page.canEdit) throw forbidden("Only the page's owner or team can change it");
   const patch = PageInput.partial().omit({ slug: true }).extend({ allowWrites: z.boolean().optional() }).parse(raw);
+  // Read from the raw body: zod's partial() still fills in defaults (visibility would become "private")
+  const visibility = raw.visibility === undefined ? page.visibility : PageInput.shape.visibility.parse(raw.visibility);
+  const departmentId = "departmentId" in raw ? patch.departmentId : page.departmentId;
+  if (raw.visibility !== undefined || "departmentId" in raw) await checkDepartment(db, userId, visibility, departmentId);
   await db.query(
     `update commons.pages set title = coalesce($2, title), description = coalesce($3, description),
-       visibility = coalesce($4, visibility), allow_writes = coalesce($5, allow_writes),
+       visibility = $4, department_id = $8, allow_writes = coalesce($5, allow_writes),
        team_id = case when $6::boolean then $7::uuid else team_id end, updated_at = now()
      where id = $1`,
-    [page.id, patch.title ?? null, patch.description ?? null, patch.visibility ?? null, patch.allowWrites ?? null, "teamId" in raw, patch.teamId ?? null],
+    [page.id, patch.title ?? null, raw.description === undefined ? null : patch.description, visibility, patch.allowWrites ?? null, "teamId" in raw, patch.teamId ?? null,
+     visibility === "department" ? departmentId : null],
   );
   await audit(db, userId, "page.update", { slug, ...patch });
   return loadPage(db, slug, userId);

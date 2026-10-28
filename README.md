@@ -24,6 +24,7 @@ Open http://localhost:5173 and pick a sample user (development sign-in; SSO come
 | Dave Dahl | none | only data open to any signed-in user |
 
 Sample datasets: `countries` ← `cities` ← `stores` ← `monthly_sales` (shared with Retail Operations only).
+Sample departments: Retail (team Retail Operations) and Data & Analytics (team Data Platform).
 
 ## What's in the box
 
@@ -41,7 +42,8 @@ templates/page starter page folder, with AGENTS.md / CLAUDE.md for coding agents
 - Defining a dataset creates a real table in the `data` schema. A **reference** field (`city`) becomes a foreign key (`city_id`) plus a link record, so the registry knows who uses what.
 - The builder can start from a CSV/JSON file: it guesses field types and a key field, then suggests reuse. It flags similar existing datasets ("this may already exist") and columns that should link to one ("`city_code` → Cities").
 - **GraphQL** is generated from the tables and rebuilt whenever a dataset changes. References work both ways: `store { city { country } }` and `city { stores }`.
-- **Permissions** are enforced by Postgres row-level security. Datasets are private (owner and team), shared (plus the teams/people it's shared with) or open to any signed-in user (stored as `company`).
+- **Permissions** are enforced by Postgres row-level security. Datasets are private (owner and team), shared (plus the teams/people it's shared with), open to **department users** (everyone in one department), or open to any signed-in user (stored as `company`).
+- **Departments** are groups above teams: a department contains whole teams and can also list individual people. Admins manage them under Settings. Owners choosing "Department users (name)" pick one of the departments they belong to. Department access is read-only, like every visibility level; editing still needs the owning team or an explicit share.
 
 ### Ingest
 

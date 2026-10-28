@@ -3,6 +3,7 @@ import { badRequest, conflict, forbidden } from "../util/errors.ts";
 import { RESERVED_FIELDS, camel, ident, literal, pascal, singular, slugify } from "../util/names.ts";
 import {
   DatasetInput,
+  Visibility,
   FieldInput,
   SQL_TYPES,
   columnFor,
@@ -123,6 +124,7 @@ export async function createDataset(db: Db, userId: string, raw: unknown): Promi
     kf.unique = true;
     kf.required = true;
   }
+  await checkDepartment(db, userId, input.visibility, input.departmentId);
   if (input.teamId) {
     const member = await db.query(
       `select 1 from commons.team_members where team_id = $1 and user_id = $2
@@ -139,9 +141,10 @@ export async function createDataset(db: Db, userId: string, raw: unknown): Promi
   }
 
   const { rows } = await db.query(
-    `insert into commons.datasets (slug, name, description, owner_id, team_id, visibility, referenceable, key_field, type_name, license, source)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
-    [slug, input.name, input.description, userId, input.teamId ?? null, input.visibility, input.referenceable,
+    `insert into commons.datasets (slug, name, description, owner_id, team_id, visibility, department_id, referenceable, key_field, type_name, license, source)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`,
+    [slug, input.name, input.description, userId, input.teamId ?? null, input.visibility,
+     input.visibility === "department" ? input.departmentId : null, input.referenceable,
      input.keyField ?? null, typeName, input.license ?? null, input.source ?? null],
   );
   const datasetId: string = rows[0].id;
@@ -299,15 +302,19 @@ export async function updateDataset(db: Db, userId: string, slug: string, raw: a
   const ds = await loadDataset(db, slug);
   await assertCanEdit(db, ds.id);
   const patch = DatasetInput.partial().omit({ fields: true, slug: true, keyField: true }).parse(raw);
+  // Read from the raw body: zod's partial() still fills in defaults (visibility would become "private")
+  const visibility = raw.visibility === undefined ? ds.visibility : Visibility.parse(raw.visibility);
+  const departmentId = "departmentId" in raw ? patch.departmentId : ds.departmentId;
+  if (raw.visibility !== undefined || "departmentId" in raw) await checkDepartment(db, userId, visibility, departmentId);
   await db.query(
     `update commons.datasets set
-       name = coalesce($2, name), description = coalesce($3, description), visibility = coalesce($4, visibility),
+       name = coalesce($2, name), description = coalesce($3, description), visibility = $4, department_id = $10,
        team_id = case when $5::boolean then $6::uuid else team_id end,
        referenceable = coalesce($7, referenceable), license = coalesce($8, license), source = coalesce($9, source),
        updated_at = now()
      where id = $1`,
-    [ds.id, patch.name ?? null, patch.description ?? null, raw.visibility ?? null, "teamId" in raw, patch.teamId ?? null,
-     raw.referenceable ?? null, patch.license ?? null, patch.source ?? null],
+    [ds.id, patch.name ?? null, raw.description === undefined ? null : patch.description, visibility, "teamId" in raw, patch.teamId ?? null,
+     raw.referenceable ?? null, patch.license ?? null, patch.source ?? null, visibility === "department" ? departmentId : null],
   );
   if (Array.isArray(raw.shares)) {
     await db.query("delete from commons.dataset_shares where dataset_id = $1", [ds.id]);
@@ -320,6 +327,17 @@ export async function updateDataset(db: Db, userId: string, slug: string, raw: a
   }
   await audit(db, userId, "dataset.update", { slug });
   return loadDataset(db, ds.id);
+}
+
+/** "Department users" needs a department the person belongs to (admins may pick any). */
+export async function checkDepartment(db: Db, userId: string, visibility: string, departmentId: string | null | undefined) {
+  if (visibility !== "department") return;
+  if (!departmentId) throw badRequest("Choose which department can see it");
+  const { rows } = await db.query(
+    "select commons.in_department($1, $2) or exists (select 1 from commons.users where id = $2 and is_admin) as ok",
+    [departmentId, userId],
+  );
+  if (!rows[0].ok) throw forbidden("You can only open things to a department you belong to");
 }
 
 export async function deleteDataset(db: Db, userId: string, slug: string, force = false) {
@@ -353,17 +371,18 @@ export async function audit(db: Db, userId: string | null, action: string, detai
 export async function listDatasets(db: Db) {
   const { rows } = await db.query(`
     select d.id, d.slug, d.name, d.description, d.visibility, d.updated_at, d.key_field,
-           u.name as owner_name, t.name as team_name,
+           u.name as owner_name, t.name as team_name, dep.name as department_name,
            (select count(*) from commons.dataset_fields f where f.dataset_id = d.id)::int as field_count,
            (select count(*) from commons.dataset_links l where l.to_dataset = d.id and l.from_dataset <> d.id)::int as used_by_count,
            commons.row_count(d.slug) as approx_rows
     from commons.datasets d
     join commons.users u on u.id = d.owner_id
     left join commons.teams t on t.id = d.team_id
+    left join commons.departments dep on dep.id = d.department_id
     where commons.can_view_dataset(d.id)
     order by d.name`);
   return rows.map((r) => ({
-    id: r.id, slug: r.slug, name: r.name, description: r.description, visibility: r.visibility,
+    id: r.id, slug: r.slug, name: r.name, description: r.description, visibility: r.visibility, departmentName: r.department_name,
     updatedAt: r.updated_at, keyField: r.key_field, ownerName: r.owner_name, teamName: r.team_name,
     fieldCount: r.field_count, usedByCount: r.used_by_count, approxRows: Math.max(0, Number(r.approx_rows ?? 0)),
   }));

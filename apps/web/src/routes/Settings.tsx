@@ -4,6 +4,7 @@ import { api, useApi, type ApiError } from "../api.ts";
 import { timeAgo } from "../components/bits.tsx";
 import { useMe } from "../main.tsx";
 import { usePublicConfig } from "../config.ts";
+import { DepartmentsAdmin } from "../components/DepartmentsAdmin.tsx";
 import { Link } from "react-router";
 
 const SCOPES = [
@@ -37,9 +38,19 @@ export function Settings() {
   return (
     <Page title="Settings" description={`${me.name} · ${me.email}`}
       actions={<Button onClick={async () => { await api("/auth/logout", { method: "POST" }); location.href = "/"; }}>Sign out</Button>}>
-      <Section title="Teams">
-        <div className="flex flex-wrap gap-2">{me.teams.length ? me.teams.map((t) => <Badge key={t.id}>{t.name}</Badge>) : <span className="text-sm text-muted-foreground">You're not in a team yet.</span>}</div>
+      <Section title="Your teams and departments">
+        <div className="flex flex-col gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-24 text-muted-foreground">Teams</span>
+            {me.teams.length ? me.teams.map((t) => <Badge key={t.id}>{t.name}</Badge>) : <span className="text-muted-foreground">none</span>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-24 text-muted-foreground">Departments</span>
+            {me.departments.length ? me.departments.map((d) => <Badge key={d.id} tone="primary">{d.name}</Badge>) : <span className="text-muted-foreground">none</span>}
+          </div>
+        </div>
       </Section>
+      {me.is_admin && <DepartmentsAdmin />}
       <Section title="Command line and coding agents"
         description={<>The commons CLI lets you and your coding agent explore data and build pages from a terminal. Needs Node.js 22+. Full guides: <Link to="/help/cli" className="text-primary hover:underline">CLI</Link> · <Link to="/help/mcp" className="text-primary hover:underline">coding agents and MCP</Link></>}>
         <div className="flex flex-col gap-3 text-sm">

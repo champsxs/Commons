@@ -27,6 +27,14 @@ export async function seed() {
     [team("data-platform"), id("alice@example.com"), team("retail-ops"), id("bob@example.com"), id("carol@example.com")],
   );
 
+  // Departments group teams (and can also list individual people)
+  const deps = await pool.query(`
+    insert into commons.departments (slug, name) values ('retail', 'Retail'), ('data-analytics', 'Data & Analytics')
+    returning id, slug`);
+  const dep = (slug: string) => deps.rows.find((d) => d.slug === slug)!.id;
+  await pool.query("insert into commons.department_teams values ($1, $2), ($3, $4)",
+    [dep("retail"), team("retail-ops"), dep("data-analytics"), team("data-platform")]);
+
   const alice = id("alice@example.com");
   const bob = id("bob@example.com");
   const csv = (s: string) => parseFile(Buffer.from(s.trim()), "x.csv");
@@ -115,7 +123,7 @@ S008,Alexanderplatz,BER,2020-10-01,1600,true`), {});
     }
     await ingest(db, bob, "monthly_sales", csv(lines.join("\n")), {});
   });
-  console.log("Seeded 4 users, 2 teams, 4 datasets");
+  console.log("Seeded 4 users, 2 teams, 2 departments, 4 datasets");
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
