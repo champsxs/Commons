@@ -59,7 +59,9 @@ export function Chart<T>({ kind, data, x, y, seriesBy, labels = {}, xFormat, for
       valueFormatter: (v: unknown) => formatValue(v, format ?? "number"),
       axisPointer: { type: kind === "bar" ? "shadow" : "line", shadowStyle: { color: "rgba(127,127,127,0.08)" }, lineStyle: { color: line } },
     };
-    const base = { color: palette(), textStyle: { fontFamily: "inherit" }, animationDuration: 400, tooltip };
+    // ECharts measures label widths itself, so it needs the real font name, not "inherit"
+    const fontFamily = typeof document === "undefined" ? "sans-serif" : getComputedStyle(el.current ?? document.body).fontFamily;
+    const base = { color: palette(), textStyle: { fontFamily }, animationDuration: 400, tooltip };
 
     if (kind === "pie" || kind === "donut") {
       return {
