@@ -1,0 +1,18 @@
+{
+  "name": "commons",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:reset": "pnpm --filter @commons/api reset && pnpm --filter @commons/api seed",
+    "dev": "pnpm --filter @commons/api dev",
+    "seed": "pnpm --filter @commons/api seed",
+    "test": "pnpm --filter @commons/api test",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
