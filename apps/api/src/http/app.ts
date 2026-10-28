@@ -19,6 +19,8 @@ import { inferFields, parseFile } from "../ingest/parse.ts";
 import { ingest } from "../ingest/ingest.ts";
 import { registerPageRoutes } from "../pages/routes.ts";
 import { registerMcpRoute } from "../mcp.ts";
+import { registerDeviceLogin } from "../auth/device.ts";
+import { registerCliDistribution } from "../cli-dist.ts";
 
 const namesFor = (ds: Dataset) =>
   graphqlNames(ds.typeName, ds.fields.map((f) => ({ name: f.name, column: f.column, reference: f.type === "reference" })));
@@ -309,6 +311,8 @@ export async function buildApp(opts: { logger?: boolean | { level: string } } = 
 
   registerPageRoutes(app);
   registerMcpRoute(app);
+  registerDeviceLogin(app);
+  registerCliDistribution(app);
 
   app.get("/api/health", async () => ({ ok: true }));
 

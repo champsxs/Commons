@@ -1,9 +1,12 @@
 import { existsSync, watch } from "node:fs";
 import { resolve } from "node:path";
-import { createInterface } from "node:readline/promises";
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
+import { hostname } from "node:os";
 import { Command } from "commander";
 import {
-  Commons, CommonsApiError, collectPageFiles, formatIssue, readManifest, saveConfig, truncateLists, writeFiles, writeSdk,
+  Commons, CommonsApiError, collectPageFiles, formatIssue, loadConfig, readManifest, saveConfig, truncateLists, writeFiles, writeSdk,
   type BuildIssue,
 } from "./client.ts";
 
@@ -25,30 +28,61 @@ function run(fn: (...args: any[]) => Promise<void>) {
   };
 }
 
+// The server that served this file replaces this with its own address
+const BAKED_URL = "__COMMONS_DEFAULT_URL__";
+const DEFAULT_URL = BAKED_URL.includes("://") ? BAKED_URL : "http://localhost:4000";
+
+function openBrowser(url: string) {
+  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  try {
+    spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
+  } catch {}
+}
+
+/** Browser sign-in: show a code, open the approval page, wait for the person to approve. */
+async function browserLogin(url: string): Promise<string> {
+  const post = async (path: string, body: unknown) => {
+    const res = await fetch(url + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return { status: res.status, body: await res.json() };
+  };
+  const start = await post("/api/auth/device", { name: `commons CLI on ${hostname()}` });
+  if (start.status !== 200) throw new Error(start.body.error ?? "Couldn't start sign-in");
+  const { deviceCode, userCode, verificationUrl, interval, expiresIn } = start.body;
+  console.log(`Opening your browser to approve this sign-in. Check the code matches: ${green(userCode)}`);
+  console.log(dim(`If it doesn't open, go to ${verificationUrl}`));
+  // Over SSH or in CI there's no browser here; the link above still works from any device
+  if (!process.env.COMMONS_NO_BROWSER && !process.env.SSH_CONNECTION) openBrowser(verificationUrl);
+  const deadline = Date.now() + expiresIn * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, interval * 1000));
+    const r = await post("/api/auth/device/token", { deviceCode });
+    if (r.status === 200) return r.body.token;
+    if (r.status !== 202) throw new Error(r.body.error ?? "Sign-in failed");
+  }
+  throw new Error("Sign-in timed out. Run commons login again.");
+}
+
 program
   .command("login")
-  .description("Sign in and save a token in ~/.commons/config.json")
-  .option("--url <url>", "Commons API address", "http://localhost:4000")
-  .option("--token <token>", "an API token from Settings → API tokens")
+  .description("Sign in through your browser and save a token in ~/.commons/config.json")
+  .option("--url <url>", "Commons API address")
+  .option("--token <token>", "use an API token from Settings → API tokens instead of the browser")
   .option("--email <email>", "development servers only: get a token for this user")
   .action(run(async (opts) => {
+    const url = (opts.url ?? (await loadConfig())?.url ?? DEFAULT_URL).replace(/\/$/, "");
     let token: string = opts.token;
     if (!token && opts.email) {
-      const res = await fetch(`${opts.url}/api/auth/dev-token`, {
+      const res = await fetch(`${url}/api/auth/dev-token`, {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: opts.email, name: "commons CLI" }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Dev login failed; use --token instead");
       token = body.token;
     }
-    if (!token) {
-      console.log(`Create a token in Commons under Settings → API tokens, then paste it here.`);
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      token = (await rl.question("Token: ")).trim();
-      rl.close();
-    }
-    const me = await new Commons({ url: opts.url, token }).get("/api/me");
-    await saveConfig({ url: opts.url, token });
+    if (!token) token = await browserLogin(url);
+    const me = await new Commons({ url, token }).get("/api/me");
+    await saveConfig({ url, token });
     console.log(green(`Signed in as ${me.name} (${me.email}) · scopes: ${me.scopes.join(", ")}`));
   }));
 
@@ -113,6 +147,81 @@ datasets
       return ref?.graphql ? `${g.fields[f.name]} { ${ref.graphql.label} }` : g.fields[f.name];
     });
     console.log(dim(`\nExample: commons query '{ ${g.listField}(first: 5) { totalCount nodes { ${sample.join(" ")} } } }'`));
+  }));
+
+function printReport(r: any) {
+  const ok = r.status === "ok" || r.status === "dry_run";
+  console.log((ok ? green : red)(`${r.status === "dry_run" ? "Check: " : ""}${r.message}`));
+  for (const [field, u] of Object.entries<any>(r.unresolved ?? {})) {
+    console.log(`  ${u.count} row(s) in "${field}" point to unknown ${u.target}: ${u.values.join(", ")}`);
+  }
+  for (const e of r.errors ?? []) console.log(`  row ${e.row}${e.field ? ` ${e.field}` : ""}: ${e.message}`);
+  if (r.ignoredColumns?.length) console.log(dim(`  ignored columns: ${r.ignoredColumns.join(", ")}`));
+  if (!ok) process.exitCode = 1;
+}
+
+async function uploadFile(c: Commons, slug: string, file: string, fields: Record<string, string>) {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) if (v !== undefined) form.append(k, v);
+  form.append("file", new Blob([await readFile(file)]), basename(file));
+  return c.upload(`/api/datasets/${slug}/ingest`, form);
+}
+
+datasets
+  .command("upload <slug> <file>")
+  .description("Upload a CSV, JSON or JSON Lines file into a dataset (needs the datasets:write scope)")
+  .option("--mode <mode>", "append, upsert (by key field) or replace", "append")
+  .option("--skip-bad-rows", "skip rows with bad values instead of rejecting the file")
+  .option("--unresolved <policy>", "unknown references: reject, skip or null")
+  .option("--dry-run", "check the file without writing anything")
+  .action(run(async (slug: string, file: string, opts) => {
+    const c = await Commons.connect();
+    printReport(await uploadFile(c, slug, file, {
+      mode: opts.mode, onError: opts.skipBadRows ? "skip" : "reject", unresolved: opts.unresolved, dryRun: String(!!opts.dryRun),
+    }));
+  }));
+
+datasets
+  .command("create <file>")
+  .description("Create a dataset from a file: guess the fields, link to existing datasets you confirm, then upload")
+  .requiredOption("--name <name>", "dataset name")
+  .option("--slug <slug>", "dataset id (default: from the name)")
+  .option("--key <field>", "key field (default: guessed)")
+  .option("--visibility <v>", "private, shared or company", "private")
+  .option("--description <text>", "what's in it")
+  .option("--link <field=dataset>", "make a column a reference, e.g. city_code=cities (repeatable)", (v: string, all: string[]) => [...all, v], [] as string[])
+  .option("--yes", "accept every suggested link to an existing dataset")
+  .action(run(async (file: string, opts) => {
+    const c = await Commons.connect();
+    const form = new FormData();
+    form.append("file", new Blob([await readFile(file)]), basename(file));
+    const inferred = await c.upload("/api/infer", form);
+    const similar = inferred.suggestions.similar as any[];
+    if (similar.length) {
+      console.log(dim("These existing datasets look similar; consider using or extending them instead:"));
+      for (const s of similar) console.log(dim(`  ${s.slug} (${s.reasons.join(", ")})`));
+    }
+    const links = new Map<string, string>(opts.link.map((l: string) => l.split("=") as [string, string]));
+    if (opts.yes) for (const r of inferred.suggestions.references) if (!links.has(r.field)) links.set(r.field, r.dataset);
+    const unused = (inferred.suggestions.references as any[]).filter((r) => !links.has(r.field));
+    for (const r of unused) console.log(dim(`Suggestion: ${r.reason}. Add --link ${r.field}=${r.dataset} to link it.`));
+
+    const keyField = opts.key ?? inferred.keyField;
+    const fields = inferred.fields.map((f: any) => {
+      const target = links.get(f.name);
+      if (!target) return { name: f.name, type: f.type, required: f.required, unique: f.unique };
+      const ref = inferred.suggestions.references.find((r: any) => r.field === f.name && r.dataset === target);
+      return {
+        name: ref?.suggestedName ?? f.name.replace(/_(code|id|key)$/, ""), type: "reference", required: f.required,
+        reference: { dataset: target, matchField: ref?.matchField },
+      };
+    });
+    const ds = await c.post("/api/datasets", {
+      name: opts.name, slug: opts.slug, description: opts.description ?? "", visibility: opts.visibility,
+      keyField: links.has(keyField) ? null : keyField, fields,
+    });
+    console.log(green(`Created ${ds.slug} with ${ds.fields.length} fields`) + dim(` (${ds.fields.map((f: any) => f.type === "reference" ? `${f.name} → ${f.reference?.toSlug}` : f.name).join(", ")})`));
+    printReport(await uploadFile(c, ds.slug, file, { mode: "append" }));
   }));
 
 // ---- Data ----

@@ -4,6 +4,9 @@ import { api, useApi, type ApiError } from "../api.ts";
 import { timeAgo } from "../components/bits.tsx";
 import { useMe } from "../main.tsx";
 
+/** Where the API is reachable from people's machines (the app proxies it in development) */
+const API_URL = import.meta.env.VITE_PUBLIC_API_URL ?? "http://localhost:4000";
+
 const SCOPES = [
   { id: "data:read", label: "Read data", hint: "Query datasets you can see" },
   { id: "data:write", label: "Change data", hint: "Insert, update and delete rows through GraphQL" },
@@ -36,6 +39,22 @@ export function Settings() {
       actions={<Button onClick={async () => { await api("/auth/logout", { method: "POST" }); location.href = "/"; }}>Sign out</Button>}>
       <Section title="Teams">
         <div className="flex flex-wrap gap-2">{me.teams.length ? me.teams.map((t) => <Badge key={t.id}>{t.name}</Badge>) : <span className="text-sm text-muted-foreground">You're not in a team yet.</span>}</div>
+      </Section>
+      <Section title="Command line and coding agents" description="The commons CLI lets you and your coding agent explore data and build pages from a terminal. Needs Node.js 22+.">
+        <div className="flex flex-col gap-3 text-sm">
+          <div>
+            <div className="mb-1 text-[13px] font-medium">Install</div>
+            <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">{`curl -fsSL ${API_URL}/cli/install.sh | sh`}</pre>
+          </div>
+          <div>
+            <div className="mb-1 text-[13px] font-medium">Sign in (opens this site to approve)</div>
+            <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">commons login</pre>
+          </div>
+          <div>
+            <div className="mb-1 text-[13px] font-medium">Connect an agent by URL (MCP)</div>
+            <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">{`claude mcp add --transport http commons ${API_URL}/mcp --header "Authorization: Bearer <token>"`}</pre>
+          </div>
+        </div>
       </Section>
       <Section title="API tokens" description="For the commons CLI, coding agents like Claude Code or Codex, and scripts. Tokens act as you.">
         <div className="flex flex-col gap-4">

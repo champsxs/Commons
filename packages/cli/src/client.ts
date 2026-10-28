@@ -66,6 +66,18 @@ export class Commons {
     return json as T;
   }
 
+  /** Multipart upload (files). */
+  async upload<T = any>(path: string, form: FormData): Promise<T> {
+    const res = await fetch(this.config.url.replace(/\/$/, "") + path, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.config.token}`, "x-commons-client": this.client },
+      body: form,
+    });
+    const json = await res.json();
+    if (!res.ok) throw new CommonsApiError(json?.error ?? `${res.status} ${res.statusText}`, res.status, json);
+    return json as T;
+  }
+
   get = <T = any>(path: string) => this.request<T>("GET", path);
   post = <T = any>(path: string, body?: unknown, ok?: number[]) => this.request<T>("POST", path, body ?? {}, ok);
 

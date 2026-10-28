@@ -73,28 +73,38 @@ Pages run on a **separate origin** (`:4100`) in a sandboxed iframe with a strict
 
 ### CLI
 
-Build the CLI and MCP server, and put `commons` on your PATH once:
+**Install.** Commons serves its own CLI. It needs Node.js 22+:
 
 ```bash
-pnpm build
-cd packages/cli && npm link
+curl -fsSL http://localhost:4000/cli/install.sh | sh
 ```
 
-Then, from anywhere:
+This installs to `~/.commons/bin/commons` and links it into a folder already on your PATH when it can. The server's address is built in; set `PUBLIC_API_URL` on the server to the address people's machines use. Run the same command again to update.
+
+**Sign in.** `commons login` opens the Commons web app. Check the code matches, choose what the CLI may do, and approve. Over SSH, or with `COMMONS_NO_BROWSER=1`, it prints the link to open on any device. `--token` uses a token from Settings → API tokens instead; `--email` works on development servers only.
+
+**Use it:**
 
 ```bash
-commons login --email carol@example.com   # dev only; otherwise create a token in Settings → API tokens
-commons datasets                          # what's there
-commons datasets show monthly_sales       # fields, references, GraphQL names
+commons datasets                              # what's there
+commons datasets show monthly_sales           # fields, references, GraphQL names
 commons query '{ allStores(first: 3) { nodes { name city { name } } } }'
-commons pages new sales-dashboard         # starter folder with AGENTS.md, CLAUDE.md, types and schema
+
+commons datasets create suppliers.csv --name Suppliers --visibility company --yes
+                                              # guesses fields; --yes links columns to existing datasets it recognises
+commons datasets upload suppliers new.csv --mode upsert --dry-run
+                                              # exit code 1 when rows have problems, so it works in scripts and CI
+
+commons pages new sales-dashboard             # starter folder with AGENTS.md, CLAUDE.md, types and schema
 cd sales-dashboard
 # ask Claude Code / Codex: "build a page comparing monthly sales by store"
-commons pages push -m "first version"     # prints build errors with file:line, or a preview URL
+commons pages push -m "first version"         # prints build errors with file:line, or a preview URL
 commons pages publish
 ```
 
-`commons pages dev` pushes a draft on every save.
+`commons pages dev` pushes a draft on every save. Dataset commands need the "Create datasets and upload files" permission when you sign in.
+
+**Developing the CLI itself:** `pnpm build`, then `node packages/cli/dist/commons.mjs`.
 
 ### MCP
 

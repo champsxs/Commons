@@ -14,6 +14,7 @@ import { Settings } from "./routes/Settings.tsx";
 import { SearchBox } from "./components/SearchBox.tsx";
 import { PageList } from "./routes/PageList.tsx";
 import { PageView } from "./routes/PageView.tsx";
+import { CliLogin } from "./routes/CliLogin.tsx";
 
 const MeCtx = createContext<{ me: Me; refresh: () => void } | null>(null);
 export const useMe = () => useContext(MeCtx)!;
@@ -95,6 +96,7 @@ function App() {
             <Route path="/pages/:slug/v/:version" element={<PageView />} />
             <Route path="/pages/:slug/:tab" element={<PageView />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/cli-login" element={<CliLogin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Shell>
