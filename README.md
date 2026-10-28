@@ -98,7 +98,17 @@ commons pages publish
 
 ### MCP
 
-The MCP server uses the same sign-in as the CLI (`~/.commons/config.json`, or `COMMONS_URL` + `COMMONS_TOKEN`).
+There are two ways to connect an agent. Both offer the same tools and act with the permissions of the token's user.
+
+**By URL (remote MCP).** The API serves MCP at `/mcp`. Create a token under Settings → API tokens, then:
+
+```bash
+claude mcp add --transport http commons http://localhost:4000/mcp --header "Authorization: Bearer cmn_..."
+```
+
+`localhost` works for agents running on the same machine. Agents elsewhere, including cloud agents, need the server's real address.
+
+**As a local program (stdio).** The agent starts `apps/mcp/dist/server.mjs` itself. It uses the same sign-in as the CLI (`~/.commons/config.json` from `commons login`, or `COMMONS_URL` + `COMMONS_TOKEN`).
 
 Claude Code (`.mcp.json` in your project, or `claude mcp add`):
 
