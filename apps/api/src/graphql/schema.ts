@@ -53,8 +53,10 @@ const KeepIdPlugin: GraphileConfig.Plugin = {
 const preset: GraphileConfig.Preset = {
   extends: [PostGraphileAmberPreset],
   plugins: [KeepIdPlugin],
-  // Without the Node interface, a dataset's `id` column stays `id` in GraphQL instead of becoming `rowId`
-  disablePlugins: ["NodePlugin"],
+  // Without the Node interface, a dataset's `id` column stays `id` in GraphQL instead of becoming `rowId`.
+  // Without index behaviors, every field can be sorted and filtered on, not only indexed ones;
+  // fine at registry scale, but very large datasets will want indexes on commonly sorted fields.
+  disablePlugins: ["NodePlugin", "PgIndexBehaviorsPlugin"],
   pgServices: [pgService],
   grafserv: { graphqlPath: "/graphql", graphiql: true, graphiqlPath: "/graphiql", watch: false, maskError },
   grafast: {

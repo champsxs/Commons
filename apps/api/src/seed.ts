@@ -4,7 +4,7 @@ import { createDataset } from "./registry/datasets.ts";
 import { ingest } from "./ingest/ingest.ts";
 import { parseFile } from "./ingest/parse.ts";
 
-/** Sample company: two teams and a small chain of linked datasets (countries -> cities -> stores -> monthly sales). */
+/** Sample company: two teams (Dave is in neither, to show permissions) and a small chain of linked datasets (countries -> cities -> stores -> monthly sales). */
 export async function seed() {
   await migrate();
   const exists = await pool.query("select 1 from commons.users limit 1");
@@ -14,7 +14,8 @@ export async function seed() {
     insert into commons.users (email, name, is_admin) values
       ('alice@example.com', 'Alice Andersson', true),
       ('bob@example.com', 'Bob Berg', false),
-      ('carol@example.com', 'Carol Chen', false)
+      ('carol@example.com', 'Carol Chen', false),
+      ('dave@example.com', 'Dave Dahl', false)
     returning id, email`);
   const id = (email: string) => users.rows.find((u) => u.email === email)!.id;
   const teams = await pool.query(`
@@ -114,7 +115,7 @@ S008,Alexanderplatz,BER,2020-10-01,1600,true`), {});
     }
     await ingest(db, bob, "monthly_sales", csv(lines.join("\n")), {});
   });
-  console.log("Seeded 3 users, 2 teams, 4 datasets");
+  console.log("Seeded 4 users, 2 teams, 4 datasets");
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -1,0 +1,23 @@
+{
+  "name": "@commons/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "commons-mcp": "./dist/server.mjs"
+  },
+  "scripts": {
+    "build": "node ../../packages/cli/build.mjs src/server.ts dist/server.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@commons/cli": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28",
+    "typescript": "5.9.3"
+  }
+}

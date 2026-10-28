@@ -113,7 +113,7 @@ export function Chart<T>({ kind, data, x, y, seriesBy, labels = {}, xFormat, for
     return {
       ...base,
       grid: { left: 8, right: 16, top: many ? 36 : 16, bottom: 8, containLabel: true },
-      legend: many ? { top: 0, left: 0, icon: "roundRect", itemWidth: 10, itemHeight: 10, textStyle: { color: text, fontSize: 12 } } : undefined,
+      legend: many ? { top: 0, left: 0, icon: "roundRect", itemWidth: 10, itemHeight: 10, itemGap: 16, textStyle: { color: text, fontSize: 12 } } : undefined,
       xAxis: horizontal ? valAxis : catAxis,
       yAxis: horizontal ? { ...catAxis, inverse: true } : valAxis,
       series: series.map((s) => ({

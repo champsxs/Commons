@@ -157,6 +157,10 @@ export function uiTypes(): Promise<Record<string, string>> {
   return sdk;
 }
 
+export function resetUiTypes() {
+  sdk = undefined;
+}
+
 export async function runtimeReady() {
   try {
     await readFile(join(runtimeDist, "boot.js"));
