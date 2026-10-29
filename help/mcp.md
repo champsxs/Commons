@@ -45,6 +45,7 @@ claude mcp add commons -- node /path/to/Commons/apps/mcp/dist/server.mjs
 | `run_query` | Run a GraphQL query as you (lists are capped at 100 items) |
 | `get_graphql_schema` | The full GraphQL schema |
 | `get_help` | These help topics, so the agent can check how Commons works |
+| `add_field` | Add a field to a dataset you can edit. Agents are told to confirm with you first; needs a token allowed to "Create datasets and upload files" |
 | `get_page_guide` | The rules and components for writing a page |
 | `list_pages`, `get_page_source` | Existing pages and their code |
 | `push_page_version` | Upload page code; returns build errors or a preview link |
@@ -57,6 +58,7 @@ claude mcp add commons -- node /path/to/Commons/apps/mcp/dist/server.mjs
 - "Build a Commons page called store-ranking that ranks stores by revenue within each country, then show me the preview."
 - "The store-ranking page should also show transactions per month. Update it and publish."
 - "If I upload this file to suppliers with add or update, what happens to suppliers missing from it? Check the Commons help."
+- "Add a region field to suppliers (text, 'Sales region')."
 
 For pages, a good agent reads the page guide, checks the real data, writes the page, and fixes any build errors it gets back before showing you the preview. You decide when to publish.
 

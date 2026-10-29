@@ -72,6 +72,41 @@ export function createCommonsMcpServer(api: () => Promise<Commons>): McpServer {
   tool("get_page_guide", "How to write a Commons page: rules the build enforces, @commons/ui components, GraphQL conventions. Read before push_page_version.", {},
     async () => (await (await api()).get("/api/sdk")).template["AGENTS.md"]);
 
+  tool("add_field",
+    "Add a field (column) to a dataset. This changes a dataset other people use, so confirm the name, type and " +
+    "description with the user before calling it. The field starts empty; fill it with an add-or-update upload. " +
+    "Needs edit access to the dataset and a token allowed to create datasets and upload files. " +
+    "Fields can't be renamed or removed with this tool.",
+    {
+      dataset: z.string().describe("dataset slug, e.g. 'suppliers'"),
+      name: z.string().regex(/^[a-z][a-z0-9_]{0,50}$/).describe("lowercase letters, digits and underscores, e.g. 'region'"),
+      type: z.enum(["text", "integer", "number", "boolean", "date", "timestamp", "json", "reference"]).default("text"),
+      label: z.string().optional().describe("display name (default: from the name)"),
+      description: z.string().optional().describe("what the field holds"),
+      required: z.boolean().optional().describe("only allowed while the dataset has no rows"),
+      unique: z.boolean().optional(),
+      references: z.object({
+        dataset: z.string().describe("the dataset it points to"),
+        matchField: z.string().optional().describe("unique field that files use to match rows (default: that dataset's key)"),
+        onDelete: z.enum(["restrict", "set_null"]).optional(),
+        unresolved: z.enum(["reject", "skip", "null"]).optional().describe("what uploads do with values that match no row"),
+      }).optional().describe("required when type is 'reference'"),
+    },
+    async ({ dataset, name, type, label, description, required, unique, references }) => {
+      if (type === "reference" && !references) throw new Error("A reference field needs `references.dataset`");
+      if (type !== "reference" && references) throw new Error("`references` is only for type 'reference'");
+      const ds = await (await api()).post(`/api/datasets/${encodeURIComponent(dataset)}/fields`, {
+        name, type, label, description: description ?? "", required: !!required, unique: !!unique,
+        reference: references ? { onDelete: "restrict", unresolved: "reject", ...references } : undefined,
+      });
+      const f = ds.fields.find((x: any) => x.name === name);
+      const ref = ds.references?.[name];
+      return {
+        added: { name: f.name, label: f.label, type: f.type, graphql: ds.graphql?.fields[name], references: ref ? { dataset: ref.dataset, matchedBy: ref.matchField } : undefined },
+        next: `Fill it with an add-or-update upload whose file has the "${ds.keyField ?? "key"}" column and a "${ref ? ref.matchField : name}" column.`,
+      };
+    });
+
   tool("get_help",
     "Commons' own documentation: how visibility and departments work, upload modes (add, add or update, replace), references, the CLI, MCP, pages, GraphQL. Without a topic, lists the topics. Check it before explaining or changing how data behaves.",
     { topic: z.string().optional().describe("topic id from the list, e.g. 'uploading'") },

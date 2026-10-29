@@ -57,6 +57,25 @@ describe("remote MCP over HTTP", () => {
     await client.close();
   });
 
+  it("adds a field when the token and the person allow it", async () => {
+    const bob = await connect(await tokenFor("bob@example.com", ["data:read", "datasets:write"]));
+    const r = await call(bob, "add_field", { dataset: "stores", name: "region", description: "Sales region" });
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text)).toMatchObject({ added: { name: "region", type: "text", graphql: "region" } });
+    const ref = await call(bob, "add_field", { dataset: "stores", name: "regional_hub", type: "reference", references: { dataset: "cities" } });
+    expect(JSON.parse(ref.text)).toMatchObject({ added: { graphql: "regionalHub", references: { dataset: "cities", matchedBy: "city_code" } } });
+    await bob.close();
+  });
+
+  it("refuses add_field without the scope or edit access", async () => {
+    const readOnly = await connect(await tokenFor("bob@example.com", ["data:read"]));
+    expect(await call(readOnly, "add_field", { dataset: "stores", name: "nope" })).toMatchObject({ isError: true, text: expect.stringContaining("datasets:write") });
+    await readOnly.close();
+    const dave = await connect(await tokenFor("dave@example.com", ["data:read", "datasets:write"]));
+    expect(await call(dave, "add_field", { dataset: "stores", name: "nope" })).toMatchObject({ isError: true, text: expect.stringContaining("edit access") });
+    await dave.close();
+  });
+
   it("requires an API token", async () => {
     await expect(connect()).rejects.toThrow();
     const res = await fetch(`${base}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
