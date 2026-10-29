@@ -635,6 +635,17 @@ pages
 
 // ---- Updates ----
 
+/** True when running as a standalone program built with `bun build --compile` (no Node needed). */
+function isStandalone() {
+  return import.meta.url.includes("$bunfs") || import.meta.url.includes("~BUN");
+}
+
+/** e.g. "darwin-arm64", "linux-x64", "windows-x64": the names of the standalone downloads. */
+function platformKey() {
+  const os = process.platform === "win32" ? "windows" : process.platform;
+  return `${os}-${process.arch === "arm64" ? "arm64" : "x64"}`;
+}
+
 /** The "## 0.3.0" sections of the What's new help topic that are newer than `since`. */
 async function whatsNewSince(url: string, since: string) {
   try {
@@ -669,23 +680,31 @@ program
     console.log(`Update available: ${VERSION} → ${latest}`);
     if (opts.check) return;
 
-    const self = await realpath(fileURLToPath(import.meta.url));
-    if (VERSION === "dev" || self.endsWith(join("packages", "cli", "dist", "commons.mjs"))) {
+    const standalone = isStandalone();
+    // The standalone program replaces itself; the Node version replaces its .mjs file
+    const self = standalone ? await realpath(process.execPath) : await realpath(fileURLToPath(import.meta.url));
+    if (VERSION === "dev" || (!standalone && self.endsWith(join("packages", "cli", "dist", "commons.mjs")))) {
       throw new Error("This is a development build of the CLI. Update it with git pull and pnpm build instead.");
     }
-    // Download next to the current file, check it runs, then swap it in
-    // .mjs so Node will run it for the check below; it becomes `commons` again when swapped in
-    const next = `${self}.download.mjs`;
-    const download = await fetch(`${url}/cli/commons.mjs`);
-    if (!download.ok) throw new Error(`Download failed (${download.status})`);
+    const source = standalone ? `${url}/cli/download/${platformKey()}` : `${url}/cli/commons.mjs`;
+    // Download next to the current file, check it starts, then swap it in. Node needs .mjs to run the check.
+    const next = standalone ? `${self}.download${process.platform === "win32" ? ".exe" : ""}` : `${self}.download.mjs`;
+    const download = await fetch(source);
+    if (!download.ok) throw new Error(`Download failed (${download.status}): ${source}`);
     await writeFile(next, Buffer.from(await download.arrayBuffer()));
     await chmod(next, 0o755);
     try {
-      const got = execFileSync(process.execPath, [next, "--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+      const [cmd, args] = standalone ? [next, ["--version"]] : [process.execPath, [next, "--version"]];
+      const got = execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
       if (got !== latest) throw new Error(`the download reports version ${got}`);
     } catch (e) {
       await rm(next, { force: true });
       throw new Error(`The downloaded CLI didn't start, so nothing was changed: ${(e as Error).message}`);
+    }
+    if (process.platform === "win32") {
+      // Windows can't overwrite a running .exe, but it can rename it out of the way
+      await rm(`${self}.old`, { force: true });
+      await rename(self, `${self}.old`);
     }
     await rename(next, self);
     console.log(green(`Updated commons ${VERSION} → ${latest}`));
@@ -713,6 +732,7 @@ async function updateNotice(command: string) {
 }
 
 program.hook("postAction", async (_cmd, action) => updateNotice(action.name()));
+if (process.platform === "win32" && isStandalone()) rm(`${process.execPath}.old`, { force: true }).catch(() => {});
 
 program.parseAsync().catch((e) => {
   console.error(red(e instanceof CommonsApiError ? e.message : String(e)));

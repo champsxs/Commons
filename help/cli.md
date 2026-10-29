@@ -6,7 +6,7 @@ order: 40
 keywords: install login terminal script token help
 ---
 
-The `commons` command line tool lets you look up datasets, run queries, upload files and build pages from a terminal. It's also how coding agents work with page files on your computer. It needs [Node.js 22](https://nodejs.org) or newer.
+The `commons` command line tool lets you look up datasets, run queries, upload files and build pages from a terminal. It's also how coding agents work with page files on your computer. It's a single program with nothing else to install.
 
 ## Install
 
@@ -14,9 +14,14 @@ The `commons` command line tool lets you look up datasets, run queries, upload f
 curl -fsSL {{apiUrl}}/cli/install.sh | sh
 ```
 
-This installs to `~/.commons/bin/commons` and links it into a folder on your PATH when it can. If it can't, it prints the line to add to your shell profile. Run the same command again to update.
+```powershell title="Windows (PowerShell)"
+powershell -c "irm {{apiUrl}}/cli/install.ps1 | iex"
+```
 
-On Windows, download [commons.mjs]({{apiUrl}}/cli/commons.mjs) and run it with `node commons.mjs`.
+The installer picks the program for your computer (Apple Silicon or Intel Mac, Linux x64 or ARM, Windows), installs it to `.commons/bin` in your home folder, and adds it to your PATH. It also remembers this Commons, so `commons login` needs no address. Update later with `commons update`.
+
+> [!NOTE]
+> Prefer Node.js? `curl -fsSL {{apiUrl}}/cli/install.sh | COMMONS_INSTALL=node sh` installs a small version that runs on Node.js 22 or newer instead.
 
 ## Sign in
 

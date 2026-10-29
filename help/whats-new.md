@@ -10,6 +10,7 @@ Update with `commons update`. The CLI tells you after a command when a newer ver
 
 ## 0.2.0
 
+- **No Node.js needed:** the CLI is a single program for macOS (Apple Silicon and Intel), Linux (x64 and ARM) and Windows. Install with one command (PowerShell on Windows); the Node.js version is still available.
 - **Install from Commons** with one command, and **sign in through your browser** with `commons login`.
 - **Data:** `datasets create` (fields guessed from a file, links to existing datasets), `datasets upload` with add, add-or-update and replace, plus `--dry-run`.
 - **Changing datasets:** `datasets add-field`, `datasets update` (description, visibility, departments, sharing, source, license), `datasets field` (label, description, deprecate).

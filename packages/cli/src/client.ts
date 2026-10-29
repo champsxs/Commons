@@ -38,7 +38,8 @@ const configPath = () => join(commonsHome(), "config.json");
 export async function loadConfig(): Promise<Config | null> {
   if (process.env.COMMONS_TOKEN) return { url: process.env.COMMONS_URL ?? "http://localhost:4000", token: process.env.COMMONS_TOKEN };
   try {
-    const c = JSON.parse(await readFile(configPath(), "utf8"));
+    // Strip a byte-order mark: some Windows tools add one when saving JSON
+    const c = JSON.parse((await readFile(configPath(), "utf8")).replace(/^\uFEFF/, ""));
     return { url: process.env.COMMONS_URL ?? c.url, token: c.token };
   } catch {
     return null;

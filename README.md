@@ -75,13 +75,17 @@ Pages run on a **separate origin** (`:4100`) in a sandboxed iframe with a strict
 
 ### CLI
 
-**Install.** Commons serves its own CLI. It needs Node.js 22+:
+**Install.** Commons serves its own CLI as a standalone program for macOS (Apple Silicon, Intel), Linux (x64, ARM) and Windows, so people don't need Node.js:
 
 ```bash
-curl -fsSL http://localhost:4000/cli/install.sh | sh
+curl -fsSL http://localhost:4000/cli/install.sh | sh                 # macOS and Linux
+powershell -c "irm http://localhost:4000/cli/install.ps1 | iex"      # Windows
 ```
 
-This installs to `~/.commons/bin/commons` and links it into a folder already on your PATH when it can. The server's address is built in; set `PUBLIC_API_URL` on the server to the address people's machines use. Run the same command again to update.
+- The installer picks the right program, installs it to `~/.commons/bin`, puts it on the PATH, and remembers the server address for `commons login`.
+- `COMMONS_INSTALL=node` installs the small Node.js version (Node 22+) instead. The installer also falls back to it when the server has no standalone build for that computer.
+- The standalone programs are built with Bun (pinned in `packages/cli`) by `pnpm build:standalone`, into `packages/cli/dist/standalone`. They're 90–115 MB each, because each contains its own JavaScript runtime.
+- Set `PUBLIC_API_URL` on the server to the address people's machines use.
 
 **Sign in.** `commons login` opens the Commons web app. Check the code matches, choose what the CLI may do, and approve. Over SSH, or with `COMMONS_NO_BROWSER=1`, it prints the link to open on any device. `--token` uses a token from Settings → API tokens instead; `--email` works on development servers only.
 
@@ -111,7 +115,7 @@ commons pages publish
 **Releasing a new CLI version:**
 1. Bump `version` in `packages/cli/package.json`.
 2. Add a `## x.y.z` section at the top of `help/whats-new.md`; `commons update` prints the sections newer than the user's version.
-3. Run `pnpm build` and deploy. The server serves whatever it has built.
+3. Run `pnpm build && pnpm build:standalone` and deploy. The server serves whatever it has built.
 4. If an API change would break older CLIs, set `CLI_MIN_VERSION`. Older CLIs are then told to run `commons update`, and updating and help keep working for them.
 
 **Developing the CLI itself:** `pnpm build`, then `node packages/cli/dist/commons.mjs`. Development builds can't self-update; use `git pull` and `pnpm build`.
@@ -210,7 +214,8 @@ Text, `## headings`, tables, and code blocks (```bash title="Label"```).
 | `POST /api/pages/:slug/publish` | make a version live |
 | `GET /api/sdk` | UI kit types, GraphQL schema and page template |
 | `GET /api/config` | public addresses (API, web app, page sandbox) |
-| `GET /cli/version` | latest and minimum CLI version |
+| `GET /cli/version` | latest and minimum CLI version, and which standalone builds exist |
+| `GET /cli/install.sh`, `/cli/install.ps1`, `/cli/download/:platform` | installers and standalone programs |
 | `GET /api/help`, `/api/help/:id` | help topics as Markdown (`?links=absolute` for use outside the app) |
 | `POST /graphql`, `GET /graphiql` | GraphQL |
 
@@ -219,5 +224,6 @@ Text, `## headings`, tables, and code blocks (```bash title="Label"```).
 - **Sign-in:** development login only. SSO goes behind the same user and team model.
 - **Sorting performance:** every field can be sorted and filtered on. Very large datasets will need indexes on commonly used fields.
 - **Builds:** pages build one at a time, in the API process. A separate worker is the next step under load.
+- **Unsigned CLI programs:** the macOS and Windows programs aren't code-signed yet. Installing with the commands above works, but a program downloaded through a browser is blocked on macOS, and Windows SmartScreen warns the first time. Signing needs an Apple Developer ID and a Windows code-signing certificate.
 - **Built-in agent:** not included yet. Pages come from coding agents via the CLI/MCP, or by hand.
 - **Not yet built:** many-to-many references (lists of references), scheduled ingestion and Iceberg storage.

@@ -15,6 +15,7 @@
     "commons": "node packages/cli/dist/commons.mjs",
     "seed": "pnpm --filter @commons/api seed",
     "test": "pnpm --filter @commons/api test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "build:standalone": "pnpm --filter @commons/cli build:standalone"
   }
 }

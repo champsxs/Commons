@@ -66,10 +66,25 @@ describe("CLI download", () => {
     expect(r.body).not.toContain("__COMMONS_DEFAULT_URL__");
   });
 
-  it("serves an install script", async () => {
-    const r = await req("GET", "/cli/install.sh");
-    expect(r.body).toContain("http://localhost:4000/cli/commons.mjs");
-    expect(r.body).toContain("Node.js 22");
+  it("serves install scripts for macOS/Linux and Windows with this server's address", async () => {
+    const sh = await req("GET", "/cli/install.sh");
+    expect(sh.body).toContain('BASE="http://localhost:4000"');
+    expect(sh.body).toContain("/cli/download/$OS-$ARCH");
+    expect(sh.body).not.toContain("__BASE__");
+    const ps1 = await req("GET", "/cli/install.ps1");
+    expect(ps1.body).toContain('$base = "http://localhost:4000"');
+    expect(ps1.body).toContain("/cli/download/windows-x64");
+  });
+
+  it("serves standalone programs for known platforms only", async () => {
+    expect((await req("GET", "/cli/download/plan9-x64")).status).toBe(404);
+    const version = await req("GET", "/cli/version");
+    for (const p of version.body.standalone) {
+      const app = await getApp();
+      const res = await app.inject({ url: `/cli/download/${p}`, method: "HEAD" });
+      expect(res.statusCode).toBe(200);
+      expect(Number(res.headers["content-length"])).toBeGreaterThan(10_000_000);
+    }
   });
 });
 

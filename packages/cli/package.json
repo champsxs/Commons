@@ -11,13 +11,15 @@
   },
   "scripts": {
     "build": "node build.mjs src/main.ts dist/commons.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:standalone": "node build-standalone.mjs"
   },
   "dependencies": {
     "commander": "^14.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "bun": "1.4.4",
     "esbuild": "^0.28.2",
     "typescript": "5.9.3"
   }

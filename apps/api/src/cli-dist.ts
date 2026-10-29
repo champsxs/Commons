@@ -1,11 +1,14 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { createReadStream } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
 import { config } from "./config.ts";
 import { repoRoot } from "./pages/paths.ts";
 import { HttpError } from "./util/errors.ts";
 import { compareVersions } from "@commons/cli/client";
 
+const here = fileURLToPath(new URL(".", import.meta.url));
 const cliPath = resolve(repoRoot, "packages/cli/dist/commons.mjs");
 const cliPackage = resolve(repoRoot, "packages/cli/package.json");
 
@@ -44,50 +47,21 @@ async function cliSource() {
   }
 }
 
-const installScript = (base: string) => `#!/bin/sh
-# Installs the commons CLI from ${base}
-set -e
+const standaloneDir = resolve(repoRoot, "packages/cli/dist/standalone");
+const PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "windows-x64"];
+const standaloneFile = (platform: string) => join(standaloneDir, `commons-${platform}${platform.startsWith("windows") ? ".exe" : ""}`);
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "commons needs Node.js 22 or newer: https://nodejs.org" >&2
-  exit 1
-fi
-NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
-if [ "$NODE_MAJOR" -lt 22 ]; then
-  echo "commons needs Node.js 22 or newer (you have $(node -v))" >&2
-  exit 1
-fi
+/** Platforms with a standalone program built on this server (pnpm build:standalone). */
+async function standalonePlatforms() {
+  const out: string[] = [];
+  for (const p of PLATFORMS) if (await stat(standaloneFile(p)).then((s) => s.isFile(), () => false)) out.push(p);
+  return out;
+}
 
-DIR="$HOME/.commons/bin"
-mkdir -p "$DIR"
-curl -fsSL "${base}/cli/commons.mjs" -o "$DIR/commons.tmp"
-mv "$DIR/commons.tmp" "$DIR/commons"
-chmod +x "$DIR/commons"
+/** The installer scripts live next to this file; __BASE__ becomes this server's address. */
+const script = async (name: string) =>
+  (await readFile(resolve(here, "cli", name), "utf8")).replaceAll("__BASE__", config.publicApiUrl.replace(/\/$/, ""));
 
-# Link into a folder that's already on PATH when there is a writable one
-LINKED=""
-for d in "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
-  case ":$PATH:" in
-    *":$d:"*)
-      if [ -d "$d" ] && [ -w "$d" ]; then
-        ln -sf "$DIR/commons" "$d/commons"
-        LINKED="$d"
-        break
-      fi
-      ;;
-  esac
-done
-
-echo "Installed commons $("$DIR/commons" --version) to $DIR/commons"
-if [ -n "$LINKED" ]; then
-  echo "Linked into $LINKED"
-else
-  echo "Add it to your PATH, e.g. in ~/.zshrc:"
-  echo "  export PATH=\\"$DIR:\\$PATH\\""
-fi
-echo ""
-echo "Next: commons login"
-`;
 
 export function registerCliDistribution(app: FastifyInstance) {
   app.get("/cli/commons.mjs", async (_req, reply) => {
@@ -97,11 +71,31 @@ export function registerCliDistribution(app: FastifyInstance) {
     return cliSource();
   });
 
-  app.get("/cli/version", async () => cliVersions());
+  app.get("/cli/version", async () => ({ ...(await cliVersions()), standalone: await standalonePlatforms() }));
 
   app.get("/cli/install.sh", async (_req, reply) => {
     reply.type("text/x-shellscript");
     reply.header("cache-control", "no-cache");
-    return installScript(config.publicApiUrl.replace(/\/$/, ""));
+    return script("install.sh");
+  });
+
+  app.get("/cli/install.ps1", async (_req, reply) => {
+    reply.type("text/plain");
+    reply.header("cache-control", "no-cache");
+    return script("install.ps1");
+  });
+
+  /** Standalone programs, e.g. /cli/download/darwin-arm64. Streamed: they're about 100 MB. */
+  app.get("/cli/download/:platform", async (req, reply) => {
+    const { platform } = req.params as { platform: string };
+    if (!PLATFORMS.includes(platform)) throw new HttpError(404, `No such platform. Available: ${PLATFORMS.join(", ")}`);
+    const file = standaloneFile(platform);
+    const info = await stat(file).catch(() => null);
+    if (!info) throw new HttpError(404, `There's no standalone ${platform} build on this server (run pnpm build:standalone)`);
+    reply.type("application/octet-stream");
+    reply.header("content-length", info.size);
+    reply.header("content-disposition", `attachment; filename="${basename(file)}"`);
+    reply.header("cache-control", "no-cache");
+    return reply.send(createReadStream(file));
   });
 }

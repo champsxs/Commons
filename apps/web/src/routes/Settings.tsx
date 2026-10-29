@@ -53,13 +53,17 @@ export function Settings() {
       </Section>
       {me.is_admin && <DepartmentsAdmin />}
       <Section title="Command line and coding agents"
-        description={<>The commons CLI lets you and your coding agent explore data and build pages from a terminal. Needs Node.js 22+. Full guides: <Link to="/help/cli" className="text-primary hover:underline">CLI</Link> · <Link to="/help/mcp" className="text-primary hover:underline">coding agents and MCP</Link></>}>
+        description={<>The commons CLI lets you and your coding agent explore data and build pages from a terminal. A single program for macOS, Linux and Windows; nothing else to install. Full guides: <Link to="/help/cli" className="text-primary hover:underline">CLI</Link> · <Link to="/help/mcp" className="text-primary hover:underline">coding agents and MCP</Link></>}>
         <div className="flex flex-col gap-3 text-sm">
           <div>
             <div className="mb-1 text-[13px] font-medium">
               Install{publicConfig.cliVersion && <span className="font-normal text-muted-foreground"> · latest version {publicConfig.cliVersion}. Already installed? Run <code className="font-mono">commons update</code> (<Link to="/help/whats-new" className="text-primary hover:underline">what's new</Link>)</span>}
             </div>
-            <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">{`curl -fsSL ${API_URL}/cli/install.sh | sh`}</pre>
+            <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">{`# macOS and Linux
+curl -fsSL ${API_URL}/cli/install.sh | sh
+
+# Windows (PowerShell)
+powershell -c "irm ${API_URL}/cli/install.ps1 | iex"`}</pre>
           </div>
           <div>
             <div className="mb-1 text-[13px] font-medium">Sign in (opens this site to approve)</div>
