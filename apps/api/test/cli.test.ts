@@ -1,6 +1,8 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { getApp, tokenFor, userId } from "./helpers.ts";
 import { signSession } from "../src/auth/auth.ts";
+import { config } from "../src/config.ts";
+import { pool } from "../src/db/pool.ts";
 
 afterAll(async () => (await getApp()).close());
 
@@ -68,5 +70,47 @@ describe("CLI download", () => {
     const r = await req("GET", "/cli/install.sh");
     expect(r.body).toContain("http://localhost:4000/cli/commons.mjs");
     expect(r.body).toContain("Node.js 22");
+  });
+});
+
+describe("CLI versions", () => {
+  const asCli = async (url: string, version: string, extra: Record<string, string> = {}) => {
+    const res = await (await getApp()).inject({ url, headers: { "x-commons-cli-version": version, ...extra } });
+    return { status: res.statusCode, headers: res.headers, body: res.body };
+  };
+
+  it("reports the latest and minimum version to CLIs only", async () => {
+    const v = JSON.parse((await asCli("/cli/version", "0.1.0")).body);
+    expect(v.latest).toMatch(/^\d+\.\d+\.\d+$/);
+    const r = await asCli("/api/help", "0.1.0");
+    expect(r.headers["x-commons-cli-latest"]).toBe(v.latest);
+    const plain = await (await getApp()).inject({ url: "/api/help" });
+    expect(plain.headers["x-commons-cli-latest"]).toBeUndefined();
+  });
+
+  it("tells CLIs below the minimum to update, but still lets them update and read help", async () => {
+    config.cliMinVersion = "9.0.0";
+    try {
+      const token = await tokenFor("carol@example.com");
+      const blocked = await asCli("/api/me", "0.2.0", { authorization: `Bearer ${token}` });
+      expect(blocked.status).toBe(426);
+      expect(JSON.parse(blocked.body).error).toMatch(/needs CLI 9\.0\.0 or newer \(you have 0\.2\.0\)\. Run: commons update/);
+      expect((await asCli("/cli/version", "0.2.0")).status).toBe(200);
+      expect((await asCli("/cli/commons.mjs", "0.2.0")).status).not.toBe(426);
+      expect((await asCli("/api/help/cli", "0.2.0")).status).toBe(200);
+      expect((await asCli("/api/me", "9.1.0", { authorization: `Bearer ${token}` })).status).toBe(200);
+    } finally {
+      config.cliMinVersion = "0.0.0";
+    }
+  });
+
+  it("records the CLI version in the audit log", async () => {
+    const token = await tokenFor("carol@example.com");
+    await (await getApp()).inject({
+      method: "POST", url: "/graphql", payload: { query: "{ allStores { totalCount } }" },
+      headers: { authorization: `Bearer ${token}`, "x-commons-client": "cli", "x-commons-cli-version": "0.2.0" },
+    });
+    const { rows } = await pool.query("select client from commons.audit_log where action = 'graphql.query' order by id desc limit 1");
+    expect(rows[0].client).toBe("cli@0.2.0");
   });
 });

@@ -1,16 +1,20 @@
 import { existsSync, watch } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { basename } from "node:path";
 import { hostname } from "node:os";
 import { Command } from "commander";
 import {
-  Commons, CommonsApiError, collectPageFiles, formatIssue, loadConfig, readManifest, saveConfig, truncateLists, writeFiles, writeSdk,
+  Commons, CommonsApiError, VERSION, collectPageFiles, commonsHome, compareVersions, formatIssue, loadConfig, readManifest, saveConfig,
+  serverVersions, truncateLists, writeFiles, writeSdk,
   type BuildIssue,
 } from "./client.ts";
 
-const program = new Command("commons").description("Commons from the command line: explore datasets, query data, build pages.").version("0.1.0");
+const program = new Command("commons").description("Commons from the command line: explore datasets, query data, build pages.").version(VERSION);
 // Options after a subcommand belong to it (e.g. --json in `datasets show x --json`, not to `datasets`)
 program.enablePositionalOptions();
 
@@ -628,6 +632,87 @@ pages
     });
     await new Promise(() => {});
   }));
+
+// ---- Updates ----
+
+/** The "## 0.3.0" sections of the What's new help topic that are newer than `since`. */
+async function whatsNewSince(url: string, since: string) {
+  try {
+    const res = await fetch(`${url}/api/help/whats-new?links=absolute`);
+    if (!res.ok) return "";
+    const { markdown } = await res.json();
+    return (markdown as string)
+      .split(/^(?=## )/m)
+      .filter((part) => {
+        const v = part.match(/^## (\d+\.\d+\.\d+)/)?.[1];
+        return v && compareVersions(v, since) > 0;
+      })
+      .join("\n")
+      .trim();
+  } catch {
+    return "";
+  }
+}
+
+program
+  .command("update")
+  .description("Update the commons CLI to the version your Commons server offers")
+  .option("--check", "only say whether an update is available")
+  .action(run(async (opts) => {
+    const url = ((await loadConfig())?.url ?? DEFAULT_URL).replace(/\/$/, "");
+    const res = await fetch(`${url}/cli/version`).catch(() => {
+      throw new Error(`Can't reach Commons at ${url}`);
+    });
+    if (!res.ok) throw new Error(`Couldn't check for updates (${res.status})`);
+    const { latest } = await res.json();
+    if (VERSION !== "dev" && compareVersions(VERSION, latest) >= 0) return console.log(green(`commons ${VERSION} is up to date`));
+    console.log(`Update available: ${VERSION} → ${latest}`);
+    if (opts.check) return;
+
+    const self = await realpath(fileURLToPath(import.meta.url));
+    if (VERSION === "dev" || self.endsWith(join("packages", "cli", "dist", "commons.mjs"))) {
+      throw new Error("This is a development build of the CLI. Update it with git pull and pnpm build instead.");
+    }
+    // Download next to the current file, check it runs, then swap it in
+    // .mjs so Node will run it for the check below; it becomes `commons` again when swapped in
+    const next = `${self}.download.mjs`;
+    const download = await fetch(`${url}/cli/commons.mjs`);
+    if (!download.ok) throw new Error(`Download failed (${download.status})`);
+    await writeFile(next, Buffer.from(await download.arrayBuffer()));
+    await chmod(next, 0o755);
+    try {
+      const got = execFileSync(process.execPath, [next, "--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+      if (got !== latest) throw new Error(`the download reports version ${got}`);
+    } catch (e) {
+      await rm(next, { force: true });
+      throw new Error(`The downloaded CLI didn't start, so nothing was changed: ${(e as Error).message}`);
+    }
+    await rename(next, self);
+    console.log(green(`Updated commons ${VERSION} → ${latest}`));
+    const notes = await whatsNewSince(url, VERSION);
+    if (notes) console.log(`\n${formatMarkdown(notes)}`);
+  }));
+
+/**
+ * After a command, mention a newer CLI at most once a day. Never in scripts: not with --json,
+ * when output isn't a terminal, in CI, or with COMMONS_NO_UPDATE_CHECK=1.
+ */
+async function updateNotice(command: string) {
+  const latest = serverVersions.latest;
+  if (!latest || VERSION === "dev" || compareVersions(VERSION, latest) >= 0) return;
+  if (command === "update" || process.argv.includes("--json") || !process.stderr.isTTY) return;
+  if (process.env.CI || process.env.COMMONS_NO_UPDATE_CHECK) return;
+  const stateFile = join(commonsHome(), "update-check.json");
+  try {
+    const state = JSON.parse(await readFile(stateFile, "utf8"));
+    if (state.latest === latest && Date.now() - state.shownAt < 24 * 3600 * 1000) return;
+  } catch {}
+  console.error(dim(`\nUpdate available: commons ${VERSION} → ${latest}. Run: commons update`));
+  await mkdir(dirname(stateFile), { recursive: true }).catch(() => {});
+  await writeFile(stateFile, JSON.stringify({ latest, shownAt: Date.now() })).catch(() => {});
+}
+
+program.hook("postAction", async (_cmd, action) => updateNotice(action.name()));
 
 program.parseAsync().catch((e) => {
   console.error(red(e instanceof CommonsApiError ? e.message : String(e)));

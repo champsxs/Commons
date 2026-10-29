@@ -16,7 +16,8 @@ const SCOPES = [
 
 export function Settings() {
   const { me } = useMe();
-  const API_URL = usePublicConfig().apiUrl;
+  const publicConfig = usePublicConfig();
+  const API_URL = publicConfig.apiUrl;
   const tokens = useApi<any[]>("/tokens");
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState(["data:read", "pages:write"]);
@@ -55,7 +56,9 @@ export function Settings() {
         description={<>The commons CLI lets you and your coding agent explore data and build pages from a terminal. Needs Node.js 22+. Full guides: <Link to="/help/cli" className="text-primary hover:underline">CLI</Link> · <Link to="/help/mcp" className="text-primary hover:underline">coding agents and MCP</Link></>}>
         <div className="flex flex-col gap-3 text-sm">
           <div>
-            <div className="mb-1 text-[13px] font-medium">Install</div>
+            <div className="mb-1 text-[13px] font-medium">
+              Install{publicConfig.cliVersion && <span className="font-normal text-muted-foreground"> · latest version {publicConfig.cliVersion}. Already installed? Run <code className="font-mono">commons update</code> (<Link to="/help/whats-new" className="text-primary hover:underline">what's new</Link>)</span>}
+            </div>
             <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">{`curl -fsSL ${API_URL}/cli/install.sh | sh`}</pre>
           </div>
           <div>

@@ -4,8 +4,36 @@ import type { FastifyInstance } from "fastify";
 import { config } from "./config.ts";
 import { repoRoot } from "./pages/paths.ts";
 import { HttpError } from "./util/errors.ts";
+import { compareVersions } from "@commons/cli/client";
 
 const cliPath = resolve(repoRoot, "packages/cli/dist/commons.mjs");
+const cliPackage = resolve(repoRoot, "packages/cli/package.json");
+
+/** The CLI version this server hands out, and the oldest one it still accepts. */
+export async function cliVersions() {
+  const { version } = JSON.parse(await readFile(cliPackage, "utf8"));
+  return { latest: version as string, minimum: config.cliMinVersion };
+}
+
+/**
+ * Every CLI request says which version it is. Responses tell it the latest version (so it can
+ * suggest `commons update`), and CLIs below the minimum get a clear "update" error instead of
+ * failing in confusing ways after an API change.
+ */
+export function registerCliVersionChecks(app: FastifyInstance) {
+  app.addHook("onRequest", async (req, reply) => {
+    const version = req.headers["x-commons-cli-version"];
+    if (typeof version !== "string") return;
+    const { latest, minimum } = await cliVersions();
+    reply.header("x-commons-cli-latest", latest);
+    reply.header("x-commons-cli-minimum", minimum);
+    // Updating and reading help must keep working for old CLIs
+    if (req.url.startsWith("/cli/") || req.url.startsWith("/api/help")) return;
+    if (compareVersions(version, minimum) < 0) {
+      throw new HttpError(426, `This Commons needs CLI ${minimum} or newer (you have ${version}). Run: commons update`);
+    }
+  });
+}
 
 /** The CLI is a single file; this server's address is baked in so `commons login` needs no --url. */
 async function cliSource() {
@@ -68,6 +96,8 @@ export function registerCliDistribution(app: FastifyInstance) {
     reply.header("cache-control", "no-cache");
     return cliSource();
   });
+
+  app.get("/cli/version", async () => cliVersions());
 
   app.get("/cli/install.sh", async (_req, reply) => {
     reply.type("text/x-shellscript");

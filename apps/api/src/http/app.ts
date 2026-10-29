@@ -20,7 +20,7 @@ import { ingest } from "../ingest/ingest.ts";
 import { registerPageRoutes } from "../pages/routes.ts";
 import { registerMcpRoute } from "../mcp.ts";
 import { registerDeviceLogin } from "../auth/device.ts";
-import { registerCliDistribution } from "../cli-dist.ts";
+import { cliVersions, registerCliDistribution, registerCliVersionChecks } from "../cli-dist.ts";
 import { departmentsOf, registerDepartmentRoutes } from "../registry/departments.ts";
 import { registerHelpRoutes } from "../help.ts";
 
@@ -84,6 +84,7 @@ export async function buildApp(opts: { logger?: boolean | { level: string } } = 
   app.addHook("onRequest", async (req) => {
     req.auth = (await authenticate(req)) ?? undefined;
   });
+  registerCliVersionChecks(app);
 
   app.setErrorHandler((err: any, _req, reply) => {
     if (err instanceof HttpError) return reply.status(err.status).send({ error: err.message, details: err.details });
@@ -324,6 +325,7 @@ export async function buildApp(opts: { logger?: boolean | { level: string } } = 
     webOrigin: config.webOrigin,
     pagesOrigin: config.pagesOrigin,
     devLogin: config.devLogin,
+    cliVersion: (await cliVersions()).latest,
   }));
 
   app.get("/api/health", async () => ({ ok: true }));

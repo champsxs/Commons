@@ -3,12 +3,37 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
+declare const __COMMONS_VERSION__: string | undefined;
+/** Set at build time from package.json; "dev" when running from source. */
+export const VERSION = typeof __COMMONS_VERSION__ === "string" ? __COMMONS_VERSION__ : "dev";
+
+/** The newest CLI and the oldest one the server still accepts, as reported on its last response. */
+export const serverVersions: { latest: string | null; minimum: string | null } = { latest: null, minimum: null };
+
+export function noteServerVersions(res: Response) {
+  serverVersions.latest = res.headers.get("x-commons-cli-latest") ?? serverVersions.latest;
+  serverVersions.minimum = res.headers.get("x-commons-cli-minimum") ?? serverVersions.minimum;
+}
+
+/** Headers every CLI request sends, so the server can tell which version is calling. The MCP server shares this client but isn't the CLI. */
+export const versionHeaders = (client = "cli"): Record<string, string> =>
+  VERSION === "dev" || !client.startsWith("cli") ? {} : { "x-commons-cli-version": VERSION };
+
+/** Compares dotted versions: -1, 0 or 1. */
+export function compareVersions(a: string, b: string) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) < (pb[i] ?? 0) ? -1 : 1;
+  return 0;
+}
+
 export interface Config {
   url: string;
   token: string;
 }
 
-const configPath = () => join(process.env.COMMONS_HOME ?? join(homedir(), ".commons"), "config.json");
+export const commonsHome = () => process.env.COMMONS_HOME ?? join(homedir(), ".commons");
+const configPath = () => join(commonsHome(), "config.json");
 
 export async function loadConfig(): Promise<Config | null> {
   if (process.env.COMMONS_TOKEN) return { url: process.env.COMMONS_URL ?? "http://localhost:4000", token: process.env.COMMONS_TOKEN };
@@ -54,12 +79,14 @@ export class Commons {
       headers: {
         authorization: `Bearer ${this.config.token}`,
         "x-commons-client": this.client,
+        ...versionHeaders(this.client),
         ...(body !== undefined ? { "content-type": "application/json" } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }).catch((e) => {
       throw new Error(`Can't reach Commons at ${this.config.url} (${e.cause?.code ?? e.message})`);
     });
+    noteServerVersions(res);
     const text = await res.text();
     const json = text && res.headers.get("content-type")?.includes("json") ? JSON.parse(text) : text;
     if (!res.ok && !okStatuses.includes(res.status)) throw new CommonsApiError(json?.error ?? `${res.status} ${res.statusText}`, res.status, json);
@@ -70,9 +97,10 @@ export class Commons {
   async upload<T = any>(path: string, form: FormData): Promise<T> {
     const res = await fetch(this.config.url.replace(/\/$/, "") + path, {
       method: "POST",
-      headers: { authorization: `Bearer ${this.config.token}`, "x-commons-client": this.client },
+      headers: { authorization: `Bearer ${this.config.token}`, "x-commons-client": this.client, ...versionHeaders(this.client) },
       body: form,
     });
+    noteServerVersions(res);
     const json = await res.json();
     if (!res.ok) throw new CommonsApiError(json?.error ?? `${res.status} ${res.statusText}`, res.status, json);
     return json as T;

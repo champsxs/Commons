@@ -5,6 +5,7 @@ export interface PublicConfig {
   webOrigin: string;
   pagesOrigin: string;
   devLogin: boolean;
+  cliVersion?: string;
 }
 
 const FALLBACK: PublicConfig = { apiUrl: "http://localhost:4000", webOrigin: location.origin, pagesOrigin: "", devLogin: false };

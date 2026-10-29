@@ -13,6 +13,8 @@ export const config = {
   apiPort: Number(env("API_PORT", "4000")),
   /** The API address people's machines use; baked into the CLI they download */
   publicApiUrl: env("PUBLIC_API_URL", "http://localhost:4000"),
+  /** CLIs older than this are told to update instead of being served (set when an API change would break them) */
+  cliMinVersion: env("CLI_MIN_VERSION", "0.0.0"),
   pagesPort: Number(env("PAGES_PORT", "4100")),
   s3: {
     endpoint: env("S3_ENDPOINT", "http://localhost:9000"),

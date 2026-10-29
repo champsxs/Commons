@@ -74,7 +74,9 @@ async function fromBearer(token: string, client: string): Promise<Auth | null> {
 }
 
 export async function authenticate(req: FastifyRequest): Promise<Auth | null> {
-  const client = String(req.headers["x-commons-client"] ?? "web").slice(0, 40);
+  // e.g. "cli:claude-code@0.2.0", so the audit log shows which CLI versions are still in use
+  const cliVersion = req.headers["x-commons-cli-version"];
+  const client = `${String(req.headers["x-commons-client"] ?? "web").slice(0, 40)}${typeof cliVersion === "string" ? `@${cliVersion.slice(0, 20)}` : ""}`;
   const header = req.headers.authorization;
   if (header?.startsWith("Bearer ")) return fromBearer(header.slice(7).trim(), client);
   const cookie = req.cookies?.[SESSION_COOKIE];

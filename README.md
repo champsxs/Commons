@@ -106,7 +106,15 @@ commons pages publish
 
 `commons pages dev` pushes a draft on every save. `commons help <topic>` prints the same help as the web app. Dataset commands need the "Create datasets and upload files" permission when you sign in.
 
-**Developing the CLI itself:** `pnpm build`, then `node packages/cli/dist/commons.mjs`.
+**Updates.** After a command, the CLI says when the server offers a newer version, at most once a day. It never does this with `--json`, when output isn't a terminal, in CI, or with `COMMONS_NO_UPDATE_CHECK=1`. `commons update` downloads the new version, checks that it starts, swaps it in, and prints what's new. Every response to the CLI carries the latest version in a header, so no extra request is needed. The audit log records each CLI version (`cli@0.2.0`), so you can see who still runs an old one.
+
+**Releasing a new CLI version:**
+1. Bump `version` in `packages/cli/package.json`.
+2. Add a `## x.y.z` section at the top of `help/whats-new.md`; `commons update` prints the sections newer than the user's version.
+3. Run `pnpm build` and deploy. The server serves whatever it has built.
+4. If an API change would break older CLIs, set `CLI_MIN_VERSION`. Older CLIs are then told to run `commons update`, and updating and help keep working for them.
+
+**Developing the CLI itself:** `pnpm build`, then `node packages/cli/dist/commons.mjs`. Development builds can't self-update; use `git pull` and `pnpm build`.
 
 ### MCP
 
@@ -202,6 +210,7 @@ Text, `## headings`, tables, and code blocks (```bash title="Label"```).
 | `POST /api/pages/:slug/publish` | make a version live |
 | `GET /api/sdk` | UI kit types, GraphQL schema and page template |
 | `GET /api/config` | public addresses (API, web app, page sandbox) |
+| `GET /cli/version` | latest and minimum CLI version |
 | `GET /api/help`, `/api/help/:id` | help topics as Markdown (`?links=absolute` for use outside the app) |
 | `POST /graphql`, `GET /graphiql` | GraphQL |
 
