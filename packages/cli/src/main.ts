@@ -11,6 +11,8 @@ import {
 } from "./client.ts";
 
 const program = new Command("commons").description("Commons from the command line: explore datasets, query data, build pages.").version("0.1.0");
+// Options after a subcommand belong to it (e.g. --json in `datasets show x --json`, not to `datasets`)
+program.enablePositionalOptions();
 
 const print = (v: unknown) => console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));
 const dim = (s: string) => (process.stdout.isTTY ? `\x1b[2m${s}\x1b[0m` : s);
@@ -117,7 +119,7 @@ program.command("whoami").description("Show who you're signed in as").action(run
   const c = await Commons.connect();
   const me = await c.get("/api/me");
   console.log(`${me.name} <${me.email}> on ${c.config.url}`);
-  console.log(dim(`teams: ${me.teams.map((t: any) => t.name).join(", ") || "none"} · scopes: ${me.scopes.join(", ")}`));
+  console.log(dim(`teams: ${me.teams.map((t: any) => t.name).join(", ") || "none"} · departments: ${me.departments.map((d: any) => d.name).join(", ") || "none"} · scopes: ${me.scopes.join(", ")}`));
 }));
 
 // ---- Help ----
@@ -180,7 +182,7 @@ program
   }));
 
 // ---- Datasets ----
-const datasets = program.command("datasets").description("List, search and inspect datasets");
+const datasets = program.command("datasets").description("List, search and inspect datasets").enablePositionalOptions();
 
 datasets
   .argument("[search]", "search datasets and fields")
@@ -260,6 +262,119 @@ datasets
     printReport(await uploadFile(c, slug, file, {
       mode: opts.mode, onError: opts.skipBadRows ? "skip" : "reject", unresolved: opts.unresolved, dryRun: String(!!opts.dryRun),
     }));
+  }));
+
+const ago = (iso: string) => {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  return s < 3600 ? `${Math.max(1, Math.round(s / 60))} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(iso).toLocaleString();
+};
+
+datasets
+  .command("usage <slug>")
+  .description("What depends on a dataset: datasets that reference it and published pages that read it")
+  .option("--json", "print JSON")
+  .action(run(async (slug: string, opts) => {
+    const c = await Commons.connect();
+    const u = await c.get(`/api/datasets/${slug}/usage`);
+    if (opts.json) return print(u);
+    if (!u.datasets.length && !u.pages.length) return console.log("Nothing depends on it yet.");
+    if (u.datasets.length) console.log("Referenced by datasets:");
+    for (const d of u.datasets) console.log(`  ${d.slug.padEnd(24)} field ${d.field}, matched on ${d.matchField}${dim(` · on delete: ${d.onDelete}`)}`);
+    if (u.pages.length) console.log("Read by published pages:");
+    for (const p of u.pages) console.log(`  ${p.slug.padEnd(24)} ${p.title}${dim(` · fields: ${p.fields.join(", ")}`)}`);
+  }));
+
+datasets
+  .command("history <slug>")
+  .description("Recent uploads to a dataset: when, who, mode, rows and result")
+  .option("-n, --limit <n>", "how many", "10")
+  .option("--json", "print JSON")
+  .action(run(async (slug: string, opts) => {
+    const c = await Commons.connect();
+    const runs = (await c.get(`/api/datasets/${slug}/ingests`)).slice(0, Number(opts.limit));
+    if (opts.json) return print(runs);
+    if (!runs.length) return console.log("No uploads yet.");
+    for (const r of runs) {
+      const status = r.status === "ok" ? green("ok    ") : red("failed");
+      console.log(`${status} ${ago(r.created_at).padEnd(20)} ${r.mode.padEnd(8)} ${String(r.rows_inserted).padStart(7)} rows  ${r.filename ?? ""}${dim(` · ${r.user_name}`)}`);
+      if (r.status !== "ok" && r.report?.message) console.log(dim(`       ${r.report.message}`));
+    }
+  }));
+
+/** Accepts a team's slug or name. */
+async function teamId(c: Commons, nameOrSlug: string): Promise<string> {
+  const teams: { id: string; slug: string; name: string }[] = await c.get("/api/teams");
+  const t = teams.find((x) => x.slug === nameOrSlug || x.name.toLowerCase() === nameOrSlug.toLowerCase());
+  if (!t) throw new Error(`No team "${nameOrSlug}". Teams: ${teams.map((x) => x.slug).join(", ")}`);
+  return t.id;
+}
+
+/** "team:retail-ops" or a person's email -> a share entry. */
+async function shareTarget(c: Commons, who: string): Promise<{ teamId?: string; userId?: string }> {
+  if (who.startsWith("team:")) return { teamId: await teamId(c, who.slice(5)) };
+  const users: { id: string; email: string }[] = await c.get("/api/users");
+  const u = users.find((x) => x.email.toLowerCase() === who.toLowerCase());
+  if (!u) throw new Error(`No user with email ${who} (for a team, use team:<name>)`);
+  return { userId: u.id };
+}
+
+const collect = (v: string, all: string[]) => [...all, v];
+
+datasets
+  .command("update <slug>")
+  .description("Change a dataset's settings: name, description, visibility, team, sharing, source, license")
+  .option("--name <name>")
+  .option("--description <text>")
+  .option("--visibility <v>", "private, shared, department, or company (any signed-in user)")
+  .option("--department <name>", "with --visibility department: which of your departments")
+  .option("--team <name>", "owning team (name or slug); use --no-team for none")
+  .option("--no-team", "remove the owning team")
+  .option("--share <who>", "share with team:<name> or a person's email (repeatable; for visibility shared)", collect, [] as string[])
+  .option("--unshare <who>", "stop sharing with team:<name> or an email (repeatable)", collect, [] as string[])
+  .option("--source <text>", "where the data comes from")
+  .option("--license <text>")
+  .option("--referenceable", "other datasets may reference this one")
+  .option("--no-referenceable", "other datasets may not reference this one")
+  .action(run(async (slug: string, opts) => {
+    const c = await Commons.connect();
+    const patch: Record<string, unknown> = {};
+    for (const k of ["name", "description", "visibility", "source", "license"]) if (opts[k] !== undefined) patch[k] = opts[k];
+    if (opts.referenceable !== undefined) patch.referenceable = opts.referenceable;
+    if (opts.team === false) patch.teamId = null;
+    else if (typeof opts.team === "string") patch.teamId = await teamId(c, opts.team);
+    if (opts.visibility === "department") patch.departmentId = await departmentId(c, opts.department ?? "");
+    else if (opts.department) throw new Error("--department goes with --visibility department");
+    if (opts.share.length || opts.unshare.length) {
+      const current = (await c.get(`/api/datasets/${slug}`)).shares.map((x: any) => ({ teamId: x.teamId ?? undefined, userId: x.userId ?? undefined }));
+      const same = (a: any, b: any) => (a.teamId ?? a.userId) === (b.teamId ?? b.userId);
+      const add = await Promise.all(opts.share.map((w: string) => shareTarget(c, w)));
+      const remove = await Promise.all(opts.unshare.map((w: string) => shareTarget(c, w)));
+      patch.shares = [...current, ...add.filter((a) => !current.some((x: any) => same(x, a)))].filter((x) => !remove.some((r) => same(r, x)));
+    }
+    if (!Object.keys(patch).length) throw new Error("Nothing to change. See commons datasets update --help");
+    const ds = await c.request("PATCH", `/api/datasets/${slug}`, patch);
+    console.log(green(`Updated ${ds.name}`) + dim(` · ${visibilityText(ds)}${ds.teamName ? ` · team ${ds.teamName}` : ""}`));
+  }));
+
+datasets
+  .command("field <slug> <field>")
+  .description("Change a field's label or description, or deprecate it (hidden from tables and new forms, still works)")
+  .option("--label <label>")
+  .option("--description <text>")
+  .option("--deprecate", "mark as deprecated")
+  .option("--undeprecate", "bring a deprecated field back")
+  .action(run(async (slug: string, field: string, opts) => {
+    const patch: Record<string, unknown> = {};
+    if (opts.label !== undefined) patch.label = opts.label;
+    if (opts.description !== undefined) patch.description = opts.description;
+    if (opts.deprecate && opts.undeprecate) throw new Error("Choose --deprecate or --undeprecate");
+    if (opts.deprecate) patch.deprecated = true;
+    if (opts.undeprecate) patch.deprecated = false;
+    if (!Object.keys(patch).length) throw new Error("Nothing to change. See commons datasets field --help");
+    const c = await Commons.connect();
+    const ds = await c.request("PATCH", `/api/datasets/${slug}/fields/${field}`, patch);
+    const f = ds.fields.find((x: any) => x.name === field);
+    console.log(green(`Updated ${f.label} (${f.name})`) + dim(`${f.deprecated ? " · deprecated" : ""}${f.description ? ` · ${f.description}` : ""}`));
   }));
 
 const FIELD_TYPES = ["text", "integer", "number", "boolean", "date", "timestamp", "json", "reference"];
@@ -454,6 +569,48 @@ pages
     if (!v) throw new Error("No version that built successfully");
     await c.post(`/api/pages/${slug}/publish`, { version: v });
     console.log(green(`v${v} is live`));
+  }));
+
+pages
+  .command("versions <slug>")
+  .description("A page's versions: which is live, which failed, who pushed them. --log <n> prints one version's build log")
+  .option("--log <version>", "print the build log of this version")
+  .option("--json", "print JSON")
+  .action(run(async (slug: string, opts) => {
+    const c = await Commons.connect();
+    if (opts.log) {
+      const v = await c.get(`/api/pages/${slug}/versions/${opts.log}`);
+      console.log(`v${v.version} · ${v.status} · ${v.createdBy}${v.message ? ` · ${v.message}` : ""}`);
+      return console.log(v.log);
+    }
+    const p = await c.get(`/api/pages/${slug}`);
+    if (opts.json) return print(p.versions);
+    console.log(`${p.title} · ${p.publishedVersion ? `v${p.publishedVersion} live` : "not published"} · ${visibilityText(p)}${p.allowWrites ? " · may change data" : ""}`);
+    for (const v of p.versions) {
+      const mark = v.id === p.publishedVersionId ? green("live  ") : v.status === "failed" ? red("failed") : v.status === "building" ? "build " : "      ";
+      console.log(`  v${String(v.version).padEnd(4)} ${mark} ${ago(v.createdAt).padEnd(20)} ${v.message ?? ""}${dim(` · ${v.createdBy}${v.client ? ` via ${v.client}` : ""}`)}`);
+    }
+  }));
+
+pages
+  .command("update <slug>")
+  .description("Change a page's title, description, visibility, or whether it may change data")
+  .option("--title <title>")
+  .option("--description <text>")
+  .option("--visibility <v>", "private, department, or company (any signed-in user)")
+  .option("--department <name>", "with --visibility department: which of your departments")
+  .option("--allow-writes", "let the page save changes (as the viewer, within their rights)")
+  .option("--no-allow-writes", "make the page read-only")
+  .action(run(async (slug: string, opts) => {
+    const c = await Commons.connect();
+    const patch: Record<string, unknown> = {};
+    for (const k of ["title", "description", "visibility"]) if (opts[k] !== undefined) patch[k] = opts[k];
+    if (opts.allowWrites !== undefined) patch.allowWrites = opts.allowWrites;
+    if (opts.visibility === "department") patch.departmentId = await departmentId(c, opts.department ?? "");
+    else if (opts.department) throw new Error("--department goes with --visibility department");
+    if (!Object.keys(patch).length) throw new Error("Nothing to change. See commons pages update --help");
+    const p = await c.request("PATCH", `/api/pages/${slug}`, patch);
+    console.log(green(`Updated ${p.title}`) + dim(` · ${visibilityText(p)}${p.allowWrites ? " · may change data" : " · read-only"}`));
   }));
 
 pages

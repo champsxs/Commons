@@ -136,7 +136,10 @@ command = "node"
 args = ["/path/to/Commons/apps/mcp/dist/server.mjs"]
 ```
 
-Tools: `search_datasets`, `list_datasets`, `get_dataset`, `get_graphql_schema`, `run_query` (lists capped at 100 items), `get_help`, `add_field`, `list_pages`, `get_page_source`, `get_page_guide`, `push_page_version`, `publish_page_version`.
+Tools:
+- **Read:** `whoami`, `search_datasets`, `list_datasets`, `get_dataset`, `suggest_reuse`, `dataset_usage`, `upload_history`, `get_graphql_schema`, `run_query` (lists capped at 100 items), `get_help`, `list_pages`, `get_page_source`, `list_page_versions`, `get_page_guide`.
+- **Change:** `set_description`, `add_field`, `push_page_version`, `publish_page_version`.
+- **Not in MCP on purpose:** deletes, uploads, visibility, departments.
 
 Every call is recorded in the audit log with the user and client (`web`, `cli`, `mcp`, `page`, plus `:claude-code` or `:codex` when detected).
 

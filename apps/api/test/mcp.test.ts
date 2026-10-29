@@ -76,6 +76,42 @@ describe("remote MCP over HTTP", () => {
     await dave.close();
   });
 
+  it("answers whoami, reuse, usage, upload history and page versions", async () => {
+    const carol = await connect(await tokenFor("carol@example.com", ["data:read", "pages:write"]));
+    const me = JSON.parse((await call(carol, "whoami")).text);
+    expect(me).toMatchObject({ name: "Carol Chen", teams: ["Retail Operations"], departments: ["Retail"], permissions: ["data:read", "pages:write"] });
+
+    const reuse = JSON.parse((await call(carol, "suggest_reuse", { name: "Store list", fields: ["store_code", "name", "city_code"] })).text);
+    expect(reuse.similarDatasets[0].slug).toBe("stores");
+    expect(reuse.linkInsteadOfCopy).toContainEqual(expect.objectContaining({ column: "city_code", dataset: "cities", suggestedFieldName: "city" }));
+
+    const usage = JSON.parse((await call(carol, "dataset_usage", { slug: "cities" })).text);
+    expect(usage.datasets).toContainEqual(expect.objectContaining({ slug: "stores", field: "city" }));
+
+    const history = JSON.parse((await call(carol, "upload_history", { slug: "stores", limit: 1 })).text);
+    expect(history[0]).toMatchObject({ status: "ok", mode: "append", rowsWritten: 8 });
+
+    const versions = JSON.parse((await call(carol, "list_page_versions", { slug: "mcp-http-test" })).text);
+    expect(versions.versions[0]).toMatchObject({ version: 1, status: "ready" });
+    await carol.close();
+  });
+
+  it("lets agents describe datasets and fields they can edit", async () => {
+    const bob = await connect(await tokenFor("bob@example.com", ["data:read", "datasets:write"]));
+    const f = JSON.parse((await call(bob, "set_description", { dataset: "stores", field: "floor_area_m2", description: "Sales floor only", label: "Floor area (m²)" })).text);
+    expect(f).toEqual({ dataset: "stores", field: "floor_area_m2", label: "Floor area (m²)", description: "Sales floor only" });
+    const d = JSON.parse((await call(bob, "set_description", { dataset: "stores", description: "All retail stores" })).text);
+    expect(d).toEqual({ dataset: "stores", description: "All retail stores" });
+    // Describing a dataset must not change its other settings
+    const after = await (await getApp()).inject({ url: "/api/datasets/stores", headers: { authorization: `Bearer ${await tokenFor("bob@example.com")}` } });
+    expect(after.json()).toMatchObject({ visibility: "company", name: "Stores", description: "All retail stores" });
+    await bob.close();
+
+    const dave = await connect(await tokenFor("dave@example.com", ["data:read", "datasets:write"]));
+    expect(await call(dave, "set_description", { dataset: "stores", description: "x" })).toMatchObject({ isError: true });
+    await dave.close();
+  });
+
   it("requires an API token", async () => {
     await expect(connect()).rejects.toThrow();
     const res = await fetch(`${base}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });

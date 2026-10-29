@@ -53,6 +53,8 @@ The CLI acts as you: it never sees more than you do. Check with `commons whoami`
 commons datasets                      # everything you can see
 commons datasets sales                # search datasets and fields
 commons datasets show monthly_sales   # fields, references, GraphQL names
+commons datasets usage cities         # datasets and published pages that depend on it
+commons datasets history stores       # recent uploads: who, when, mode, rows, result
 commons query '{ allStores(first: 5) { nodes { name city { name } } } }'
 ```
 
@@ -61,6 +63,14 @@ commons datasets create suppliers.csv --name Suppliers --visibility company   # 
 commons datasets upload suppliers new.csv --mode upsert --dry-run
 commons datasets add-field suppliers --name region --description "Sales region"
 commons datasets add-field suppliers --name hq_city --type reference --to cities
+```
+
+```bash title="Settings"
+commons datasets update suppliers --description "Suppliers we buy from" --source "ERP export"
+commons datasets update suppliers --visibility shared --share team:data-platform --share carol@example.com
+commons datasets update suppliers --visibility department --department retail
+commons datasets field suppliers on_time_rate --label "On-time rate" --description "Share of deliveries on time, 0-1"
+commons datasets field suppliers old_code --deprecate
 ```
 
 `datasets create` guesses the fields from the file and tells you which columns look like links to existing datasets. Add `--link country_code=countries` to link one, or `--yes` to accept all suggestions. Use `--visibility department --department retail` to open it to a department. See [Uploading and updating data](/help/uploading) for upload modes.
@@ -73,6 +83,9 @@ cd sales-dashboard
 commons pages push -m "first version" # build on the server; prints errors or a preview link
 commons pages publish                 # make it live
 commons pages dev                     # push a draft on every save
+commons pages versions sales-dashboard           # which version is live, which failed
+commons pages versions sales-dashboard --log 3   # build log of version 3
+commons pages update sales-dashboard --visibility company --allow-writes
 ```
 
 ```bash title="Help"
@@ -80,7 +93,9 @@ commons help                          # list help topics
 commons help uploading                # read one, the same text as this page
 ```
 
-Add `--help` to any command for all its options.
+Add `--help` to any command for all its options, and `--json` to the listing commands for output scripts can read.
+
+Deleting datasets, fields and pages, and managing departments, are done in the web app.
 
 > [!NOTE]
 > Use the CLI when you want files on disk (pages you keep in git, scripts, scheduled uploads). For quick questions in a chat with an agent, [MCP](/help/mcp) is usually simpler.

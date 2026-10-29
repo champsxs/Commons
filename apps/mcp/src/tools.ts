@@ -72,6 +72,81 @@ export function createCommonsMcpServer(api: () => Promise<Commons>): McpServer {
   tool("get_page_guide", "How to write a Commons page: rules the build enforces, @commons/ui components, GraphQL conventions. Read before push_page_version.", {},
     async () => (await (await api()).get("/api/sdk")).template["AGENTS.md"]);
 
+  tool("whoami", "Who the agent is acting as: name, teams, departments and the token's permissions.", {},
+    async () => {
+      const me = await (await api()).get("/api/me");
+      return { name: me.name, email: me.email, admin: me.is_admin, teams: me.teams.map((t: any) => t.name), departments: me.departments.map((d: any) => d.name), permissions: me.scopes };
+    });
+
+  tool("suggest_reuse",
+    "Before proposing a new dataset: finds existing datasets that look like the same thing, and columns that should be " +
+    "references to existing datasets instead of copies. Commons prefers linking to shared data over duplicating it.",
+    {
+      name: z.string().describe("proposed dataset name, e.g. 'Store regions'"),
+      description: z.string().optional(),
+      fields: z.array(z.string()).describe("proposed field or column names, e.g. ['store_code', 'region', 'city_code']"),
+    },
+    async ({ name, description, fields }) => {
+      const r = await (await api()).post("/api/datasets/suggest", { name, description: description ?? "", fields: fields.map((f) => ({ name: f })) });
+      return {
+        similarDatasets: r.similar.map((d: any) => ({ slug: d.slug, name: d.name, why: d.reasons.join("; ") })),
+        linkInsteadOfCopy: r.references.map((x: any) => ({ column: x.field, dataset: x.dataset, matchedBy: x.matchField, suggestedFieldName: x.suggestedName, why: x.reason })),
+      };
+    });
+
+  tool("dataset_usage",
+    "What depends on a dataset: other datasets that reference it (and the field they match on) and published pages " +
+    "that read it. Check before suggesting changes to a dataset's fields.",
+    { slug: z.string() },
+    async ({ slug }) => (await api()).get(`/api/datasets/${encodeURIComponent(slug)}/usage`));
+
+  tool("upload_history", "Recent uploads to a dataset: when, who, mode, rows written and whether they failed (with the reason).",
+    { slug: z.string(), limit: z.number().int().min(1).max(50).default(10) },
+    async ({ slug, limit }) => {
+      const runs = await (await api()).get(`/api/datasets/${encodeURIComponent(slug)}/ingests`);
+      return runs.slice(0, limit).map((r: any) => ({
+        at: r.created_at, by: r.user_name, file: r.filename, mode: r.mode, status: r.status,
+        rowsInFile: r.rows_total, rowsWritten: r.rows_inserted, rowsSkipped: r.rows_skipped, message: r.report?.message,
+      }));
+    });
+
+  tool("list_page_versions",
+    "A page's versions: which is live, which failed to build, who pushed them and when, and which dataset fields each reads. " +
+    "Use get_page_source with a version number for its code and build log.",
+    { slug: z.string() },
+    async ({ slug }) => {
+      const p = await (await api()).get(`/api/pages/${encodeURIComponent(slug)}`);
+      return {
+        title: p.title, live: p.publishedVersion, visibility: p.visibility, allowWrites: p.allowWrites,
+        versions: p.versions.map((v: any) => ({
+          version: v.version, status: v.status, live: v.id === p.publishedVersionId, message: v.message, by: v.createdBy, via: v.client, at: v.createdAt,
+          reads: v.dependencies.map((d: any) => `${d.dataset}.${d.field}`),
+        })),
+      };
+    });
+
+  tool("set_description",
+    "Write or improve the description of a dataset, or of one of its fields (and optionally the field's display label), " +
+    "so people know what the data means. Confirm the wording with the user first. Needs edit access to the dataset " +
+    "and a token allowed to create datasets and upload files.",
+    {
+      dataset: z.string(),
+      field: z.string().optional().describe("leave out to describe the dataset itself"),
+      description: z.string().max(2000),
+      label: z.string().max(80).optional().describe("for a field: its display name"),
+    },
+    async ({ dataset, field, description, label }) => {
+      const c = await api();
+      if (field) {
+        const ds = await c.request("PATCH", `/api/datasets/${encodeURIComponent(dataset)}/fields/${encodeURIComponent(field)}`, { description, label });
+        const f = ds.fields.find((x: any) => x.name === field);
+        return { dataset: ds.slug, field: f.name, label: f.label, description: f.description };
+      }
+      if (label) throw new Error("`label` is only for fields");
+      const ds = await c.request("PATCH", `/api/datasets/${encodeURIComponent(dataset)}`, { description });
+      return { dataset: ds.slug, description: ds.description };
+    });
+
   tool("add_field",
     "Add a field (column) to a dataset. This changes a dataset other people use, so confirm the name, type and " +
     "description with the user before calling it. The field starts empty; fill it with an add-or-update upload. " +
