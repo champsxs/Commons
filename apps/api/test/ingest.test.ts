@@ -99,3 +99,31 @@ describe("ingest", () => {
     expect(r.body[0]).toHaveProperty("report");
   });
 });
+
+describe("add or update with some columns left out", () => {
+  it("updates only the columns in the file and keeps the rest", async () => {
+    await api("POST", "/api/datasets/warehouses/fields", bob, { name: "region", type: "text" });
+    const r = await upload(bob, url, "warehouse_code,region\nW1,North\nW2,West\n", { mode: "upsert" });
+    expect(r.body).toMatchObject({ status: "ok", rowsWritten: 2, message: "2 row(s) updated, 0 added." });
+    const q = await gql(bob, `{ warehouseByWarehouseCode(warehouseCode: "W1") { name capacity region city { name } } }`);
+    expect(q.data.warehouseByWarehouseCode).toEqual({ name: "North (renamed)", capacity: 1500, region: "North", city: { name: "Stockholm" } });
+  });
+
+  it("explains when new rows lack required fields", async () => {
+    const r = await upload(bob, url, "warehouse_code,region\nW1,East\nNEW1,South\n", { mode: "upsert" });
+    expect(r.body.status).toBe("failed");
+    expect(r.body.message).toMatch(/1 row\(s\) are new \(warehouse_code: NEW1\).*name/);
+    const q = await gql(bob, `{ warehouseByWarehouseCode(warehouseCode: "W1") { region } }`);
+    expect(q.data.warehouseByWarehouseCode.region).toBe("North");
+  });
+
+  it("needs the key column to match rows", async () => {
+    const r = await upload(bob, url, "region\nNorth\n", { mode: "upsert" });
+    expect(r.body).toMatchObject({ status: "failed", message: expect.stringContaining('needs a "warehouse_code" column') });
+  });
+
+  it("still adds new rows when every required column is there", async () => {
+    const r = await upload(bob, url, "warehouse_code,name,region\nW1,North hub,North\nW20,Brand new,East\n", { mode: "upsert" });
+    expect(r.body).toMatchObject({ status: "ok", message: "1 row(s) updated, 1 added." });
+  });
+});

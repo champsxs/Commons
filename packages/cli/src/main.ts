@@ -34,11 +34,21 @@ function run(fn: (...args: any[]) => Promise<void>) {
     try {
       await fn(...args);
     } catch (e) {
-      console.error(red(`Error: ${(e as Error).message}`));
+      const message = (e as Error).message;
+      console.error(red(`Error: ${message}`));
+      const scope = message.match(/lacks the ([a-z:]+) scope/)?.[1];
+      if (scope) console.error(dim(`Run commons login again and allow "${SCOPE_NAMES[scope] ?? scope}".`));
       process.exitCode = 1;
     }
   };
 }
+
+const SCOPE_NAMES: Record<string, string> = {
+  "data:read": "Read data you can see",
+  "pages:write": "Create and publish pages",
+  "datasets:write": "Create datasets and upload files",
+  "data:write": "Change rows through GraphQL",
+};
 
 // The server that served this file replaces this with its own address
 const BAKED_URL = "__COMMONS_DEFAULT_URL__";
@@ -250,6 +260,40 @@ datasets
     printReport(await uploadFile(c, slug, file, {
       mode: opts.mode, onError: opts.skipBadRows ? "skip" : "reject", unresolved: opts.unresolved, dryRun: String(!!opts.dryRun),
     }));
+  }));
+
+const FIELD_TYPES = ["text", "integer", "number", "boolean", "date", "timestamp", "json", "reference"];
+
+datasets
+  .command("add-field <slug>")
+  .description("Add a field (column) to a dataset. It starts empty; fill it with an upload (needs the datasets:write scope).")
+  .requiredOption("--name <name>", "field name: lowercase letters, digits and underscores, e.g. region")
+  .option("--type <type>", `one of ${FIELD_TYPES.join(", ")}`, "text")
+  .option("--label <label>", "display name (default: from the name)")
+  .option("--description <text>", "what the field holds")
+  .option("--required", "every row must have a value (only allowed while the dataset is empty)")
+  .option("--unique", "no two rows may share a value")
+  .option("--to <dataset>", "for --type reference: the dataset it points to")
+  .option("--match <field>", "for references: the unique field your files use to match rows (default: that dataset's key)")
+  .option("--on-delete <action>", "for references: restrict (default) or set_null when the referenced row is deleted")
+  .option("--unresolved <policy>", "for references: what uploads do with unknown values: reject (default), skip or null")
+  .action(run(async (slug: string, opts) => {
+    if (!FIELD_TYPES.includes(opts.type)) throw new Error(`--type must be one of ${FIELD_TYPES.join(", ")}`);
+    if (opts.type === "reference" && !opts.to) throw new Error("A reference needs --to <dataset>");
+    if (opts.type !== "reference" && (opts.to || opts.match)) throw new Error("--to and --match are for --type reference");
+    const c = await Commons.connect();
+    const ds = await c.post(`/api/datasets/${slug}/fields`, {
+      name: opts.name, type: opts.type, label: opts.label, description: opts.description ?? "",
+      required: !!opts.required, unique: !!opts.unique,
+      reference: opts.type === "reference"
+        ? { dataset: opts.to, matchField: opts.match, onDelete: opts.onDelete ?? "restrict", unresolved: opts.unresolved ?? "reject" }
+        : undefined,
+    });
+    const f = ds.fields.find((x: any) => x.name === opts.name);
+    const ref = ds.references?.[opts.name];
+    console.log(green(`Added ${f.label} (${f.name}) to ${ds.name}`) + dim(` · ${f.type}${ref ? ` → ${ref.dataset} by ${ref.matchField}` : ""}`));
+    console.log(dim(`GraphQL: ${ds.graphql?.fields[f.name]}${ref ? ` (id column: ${ds.graphql?.inputs[f.name]})` : ""}`));
+    console.log(dim(`Fill it with an upload that has a "${ref ? ref.matchField : f.name}" column, e.g. commons datasets upload ${ds.slug} file.csv --mode upsert`));
   }));
 
 datasets

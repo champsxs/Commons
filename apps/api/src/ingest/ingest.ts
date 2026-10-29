@@ -72,8 +72,14 @@ export async function ingest(db: Db, userId: string, slug: string, rows: RawRow[
     errors: [], unresolved: {}, ignoredColumns: ignored, columnMapping: mapping,
   };
 
+  // Add or update may leave columns out (they keep their values), but must say which rows it means
+  if (opts.mode === "upsert" && !mapping[ds.keyField!]) {
+    report.status = "failed";
+    report.message = `The file needs a "${ds.keyField}" column so rows can be matched for updating`;
+    return finish(db, userId, ds.id, report, opts, filename);
+  }
   const missing = fields.filter((f) => f.required && !mapping[f.name]).map((f) => f.name);
-  if (missing.length) {
+  if (missing.length && opts.mode !== "upsert") {
     report.status = "failed";
     report.message = `The file has no column for required field(s): ${missing.join(", ")}`;
     return finish(db, userId, ds.id, report, opts, filename);
@@ -149,15 +155,38 @@ export async function ingest(db: Db, userId: string, slug: string, rows: RawRow[
     return finish(db, userId, ds.id, report, opts, filename);
   }
 
+  // A partial add-or-update can update existing rows, but new rows still need every required field
+  if (opts.mode === "upsert" && missing.length) {
+    const key = ds.keyField!;
+    const keys = [...new Set(good.map((r) => String(r[key])))];
+    const { rows: found } = await withDataRole(db, () =>
+      db.query(`select ${ident(key)}::text as k from data.${ident(ds.slug)} where ${ident(key)}::text = any($1)`, [keys]),
+    );
+    const existing = new Set(found.map((r) => r.k));
+    const fresh = keys.filter((k) => !existing.has(k));
+    if (fresh.length) {
+      report.status = "failed";
+      report.message = `${fresh.length} row(s) are new (${key}: ${fresh.slice(0, 5).join(", ")}${fresh.length > 5 ? "…" : ""}), ` +
+        `and new rows need the required field(s) ${missing.join(", ")}, which the file doesn't have. Nothing was written.`;
+      return finish(db, userId, ds.id, report, opts, filename);
+    }
+  }
+
   // 3. Write in chunks, as the user, inside a savepoint so a database error leaves nothing half-written
   const cols = fields.filter((f) => mapping[f.name]);
+  let updated = 0;
   await db.query("savepoint ingest");
   try {
     await withDataRole(db, async () => {
       if (opts.mode === "replace") await db.query(`delete from data.${ident(ds.slug)}`);
       for (let i = 0; i < good.length; i += 5000) {
         const chunk = good.slice(i, i + 5000);
-        const res = await db.query(insertSql(ds.slug, cols, opts.mode === "upsert" ? ds.keyField : null), [JSON.stringify(chunk)]);
+        const json = JSON.stringify(chunk);
+        if (opts.mode === "upsert") {
+          const u = updateSql(ds.slug, cols, ds.keyField!);
+          if (u) updated += (await db.query(u, [json])).rowCount ?? 0;
+        }
+        const res = await db.query(insertSql(ds.slug, cols, opts.mode === "upsert" ? ds.keyField : null), [json]);
         report.rowsWritten += res.rowCount ?? 0;
       }
     });
@@ -169,7 +198,11 @@ export async function ingest(db: Db, userId: string, slug: string, rows: RawRow[
     report.message = explainDbError(e, ds.slug);
     return finish(db, userId, ds.id, report, opts, filename);
   }
-  report.message = `${report.rowsWritten} row(s) written${report.rowsSkipped ? `, ${report.rowsSkipped} skipped` : ""}.`;
+  const added = report.rowsWritten;
+  report.rowsWritten += updated;
+  report.message = opts.mode === "upsert"
+    ? `${updated} row(s) updated, ${added} added${report.rowsSkipped ? `, ${report.rowsSkipped} skipped` : ""}.`
+    : `${report.rowsWritten} row(s) written${report.rowsSkipped ? `, ${report.rowsSkipped} skipped` : ""}.`;
   return finish(db, userId, ds.id, report, opts, filename);
 }
 
@@ -189,17 +222,27 @@ async function withDataRole<T>(db: Db, fn: () => Promise<T>): Promise<T> {
   return result;
 }
 
-function insertSql(slug: string, cols: Field[], upsertKey: string | null) {
-  const colDefs = cols.map((f) => `${ident(f.name)} ${f.type === "reference" ? "uuid" : SQL_TYPES[f.type as keyof typeof SQL_TYPES]}`);
+const recordset = (cols: Field[]) =>
+  `jsonb_to_recordset($1::jsonb) as x(${cols.map((f) => `${ident(f.name)} ${f.type === "reference" ? "uuid" : SQL_TYPES[f.type as keyof typeof SQL_TYPES]}`).join(", ")})`;
+
+/**
+ * Adds the file's rows. For add-or-update (`newOnlyKey`), only rows whose key isn't there yet;
+ * existing ones go through updateSql. (A single INSERT … ON CONFLICT can't do a partial update:
+ * Postgres checks required columns before it notices the row exists.)
+ */
+function insertSql(slug: string, cols: Field[], newOnlyKey: string | null) {
   const target = cols.map((f) => ident(f.column));
   const source = cols.map((f) => `x.${ident(f.name)}`);
-  let sql = `insert into data.${ident(slug)} (${target.join(", ")})
-    select ${source.join(", ")} from jsonb_to_recordset($1::jsonb) as x(${colDefs.join(", ")})`;
-  if (upsertKey) {
-    const updates = cols.filter((f) => f.name !== upsertKey).map((f) => `${ident(f.column)} = excluded.${ident(f.column)}`);
-    sql += ` on conflict (${ident(upsertKey)}) do ${updates.length ? `update set ${updates.join(", ")}` : "nothing"}`;
-  }
+  let sql = `insert into data.${ident(slug)} (${target.join(", ")}) select ${source.join(", ")} from ${recordset(cols)}`;
+  if (newOnlyKey) sql += ` where not exists (select 1 from data.${ident(slug)} t where t.${ident(newOnlyKey)} = x.${ident(newOnlyKey)})`;
   return sql;
+}
+
+/** Updates rows whose key is in the file, changing only the columns the file has. */
+function updateSql(slug: string, cols: Field[], key: string) {
+  const sets = cols.filter((f) => f.name !== key).map((f) => `${ident(f.column)} = x.${ident(f.name)}`);
+  if (!sets.length) return null;
+  return `update data.${ident(slug)} as t set ${sets.join(", ")} from ${recordset(cols)} where t.${ident(key)} = x.${ident(key)}`;
 }
 
 function explainDbError(e: any, slug: string): string {

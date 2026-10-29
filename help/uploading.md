@@ -22,9 +22,11 @@ The mode decides how the file treats rows that are already there.
 
 ### What add or update changes
 
-- Only columns that are in the file. Leave a column out to keep its current values.
+- Only columns that are in the file. Leave a column out to keep its current values. The file only needs the key column plus the columns you're changing, which is also how you fill a newly added field.
 - An **empty cell clears** the value for that row. To keep a value, leave the whole column out of the file.
 - `updated_at` is set on every row it touches.
+- New rows (keys not in Commons yet) still need every required field. If the file leaves one out, Commons names the new keys and writes nothing.
+- The report says how many rows were updated and how many were added.
 
 ### Replace and links
 

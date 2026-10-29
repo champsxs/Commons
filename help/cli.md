@@ -59,9 +59,13 @@ commons query '{ allStores(first: 5) { nodes { name city { name } } } }'
 ```bash title="Data"
 commons datasets create suppliers.csv --name Suppliers --visibility company   # company = any signed-in user
 commons datasets upload suppliers new.csv --mode upsert --dry-run
+commons datasets add-field suppliers --name region --description "Sales region"
+commons datasets add-field suppliers --name hq_city --type reference --to cities
 ```
 
 `datasets create` guesses the fields from the file and tells you which columns look like links to existing datasets. Add `--link country_code=countries` to link one, or `--yes` to accept all suggestions. Use `--visibility department --department retail` to open it to a department. See [Uploading and updating data](/help/uploading) for upload modes.
+
+`datasets add-field` adds a column. It starts empty: fill it with an add-or-update upload whose file has just the key column and the new one (for a reference, the matched value, e.g. `city_code`). Run `commons datasets add-field --help` for every option.
 
 ```bash title="Pages"
 commons pages new sales-dashboard     # a folder with a starter page and instructions for agents

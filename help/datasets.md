@@ -50,7 +50,7 @@ Because other teams build on your data, some changes are blocked or need confirm
 | Remove a field others match on | Blocked. Deprecate it instead. |
 | Remove a field a published page uses | Asks you to confirm; the page may break. |
 | Delete a dataset others reference | Blocked until those references are removed. |
-| Add a field | Always fine. New fields start empty; required fields can only be added to empty datasets. |
+| Add a field | Always fine, in the Fields tab or with `commons datasets add-field`. New fields start empty; required fields can only be added to empty datasets. |
 
 ### Renaming a field
 
